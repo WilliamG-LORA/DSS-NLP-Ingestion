@@ -1,0 +1,16 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: newsfilter-configs
+data:
+  configs: |
+    class: 2
+    mongo_collection: lurkers.class2.en.newsfilter
+    es_index: nlp-scrapedata-class2-newsfilter
+    redis_list_name: class2_en_newsfilter
+    api:
+      key: e3eff06eee5d4e6181a14fb310ec72592ff157b6253f4d4fb15f414fba698f25
+      query_api: https://api.newsfilter.io/public/actions
+      render_api: https://api.newsfilter.io/articles/{article_id}.html
+    num_retries: 10
