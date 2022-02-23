@@ -10,11 +10,11 @@ spec:
     - name: master
       image: redis
       resources:
-      limits:
-        memory: "128Mi"
-        cpu: "500m"
+        limits:
+          memory: "128Mi"
+          cpu: "500m"
       env:
-        - name: MASTER
+        - name: MASTER # ? What is this?
           value: "true"
       ports:
         - containerPort: 6379

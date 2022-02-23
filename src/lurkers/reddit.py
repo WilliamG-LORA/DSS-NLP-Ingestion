@@ -37,7 +37,7 @@ class Reddit(Lurker):
 
         try:
             # Base Class Parameters
-            configs = get_configs('res/configs/newsfilter-configs.yaml')
+            configs = get_configs('res/configs/newsfilter_configs.yaml')
             super().__init__(configs, logger)
             
             # Subclass Params

@@ -18,7 +18,7 @@ def update_universe(universe_collection):
         universe_collection (obj): the big_universe mongodb collection_name
         config (dict): the configuration for postgres, mongodb etc.
     """
-    aws_universe = DbConn("res/configs/big-universe.yaml")
+    aws_universe = DbConn("res/db-creds/big_universe.yaml")
     
     try:
         res = aws_universe('''
@@ -53,13 +53,16 @@ def populate_wq(tickers: List[str], name: str):
 
 
 def main():
-    config = get_configs('res/configs/base-configs.yaml')
+    config = get_configs('res/configs/setup_configs.yaml')
     universe_collection = connect_to_mongodb(config['universe_collection'])
     redis_wqs = config['redis_wqs']
-    #Update universe
+    # Update universe
     update_universe(universe_collection=universe_collection)
 
     # Populate RedisWQ
     tickers = universe_collection.distinct('ticker_symbol')
     for wq in redis_wqs:
         populate_wq(tickers, wq)
+
+if __name__ == "__main__":
+    main()

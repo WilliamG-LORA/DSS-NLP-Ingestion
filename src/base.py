@@ -19,11 +19,11 @@ from datetime import datetime
 from utils.general_utils import get_configs
 
 # Import grpc dependencies
-import grpc
-from grapevine_pb2_grpc import GPTKStub, StockHotnessCalculatorStub
-from grapevine_pb2 import GPTKIngressRequest, SHCIngressRequest
-from load_grpc_options import get_options as get_grpc_options
-from concurrent import futures
+# import grpc
+# from grapevine_pb2_grpc import GPTKStub, StockHotnessCalculatorStub
+# from grapevine_pb2 import GPTKIngressRequest, SHCIngressRequest
+# from load_grpc_options import get_options as get_grpc_options
+# from concurrent import futures
 
 class Lurker(ABC):
     """
@@ -41,18 +41,18 @@ class Lurker(ABC):
         self.logger.info("Connecting to microservices..")
         try:
             # Get Configs
-            base_config = get_configs('res/configs/base-configs.yaml')
-            options = get_grpc_options()
+            base_config = get_configs('res/configs/base_configs.yaml')
+            # options = get_grpc_options()
 
-            # GPT-K Connection
-            gptk_host = os.getenv("GPTK_HOST")
-            gptk_channel = grpc.insecure_channel(f"{gptk_host}:50051", options=options)
-            self.gptk_client = GPTKStub(gptk_channel)
+            # # GPT-K Connection
+            # gptk_host = os.getenv("GPTK_HOST")
+            # gptk_channel = grpc.insecure_channel(f"{gptk_host}:50051", options=options)
+            # self.gptk_client = GPTKStub(gptk_channel)
 
-            # Stock Hotness Calculator Connection
-            shc_host = os.getenv("SHC_HOST")
-            shc_channel = grpc.insecure_channel(f"{shc_host}:50051", options=options)
-            self.shc_client = StockHotnessCalculatorStub(shc_channel)
+            # # Stock Hotness Calculator Connection
+            # shc_host = os.getenv("SHC_HOST")
+            # shc_channel = grpc.insecure_channel(f"{shc_host}:50051", options=options)
+            # self.shc_client = StockHotnessCalculatorStub(shc_channel)
 
             # Connect to MongoDB
             self.universe_collection = connect_to_mongodb(base_config['universe_collection'])

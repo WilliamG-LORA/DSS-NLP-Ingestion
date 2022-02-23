@@ -1,0 +1,45 @@
+# This pod contains the worker that takes tickers from the queue and scrapes for those tickers.
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: lurker
+spec:
+  parallelism: 2
+  template:
+    metadata:
+      name: lurker
+    spec:
+      containers:
+      - name: worker
+        image: nlp-ingestion-worker
+        args: [ 'base.py' ] # TODO This should run the scrape() func from the lurker base class.
+        volumeMounts:
+          - name: configs
+            mountPath: res/configs/
+            readOnly: true
+          - name: db-creds
+            mountPath: res/db-creds/
+            readOnly: true
+      volumes:
+        - name: configs
+          configMap:
+            name: configs
+            items:
+            - key: base-configs
+              path: base-configs.yaml
+            - key: newsfilter-configs
+              path: newsfilter-configs.yaml
+            - key: reddit-configs
+              path: reddit-configs.yaml
+            - key: setup-configs
+              path: setup-configs.yaml
+        - name: db-creds
+          secret:
+            secretName: db-creds
+            items:
+            - key: scraper-storage
+              path: scraper_storage.yaml
+            - key: big-universe
+              path: big_universe.yaml
+      restartPolicy: OnFailure

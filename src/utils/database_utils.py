@@ -42,19 +42,20 @@ def connect_to_mongodb(collection: str) -> pymongo.collection.Collection:
         pymongo.collection.Collection: self-explanatory.
     """
     # Load Creds
-    creds_file_path = "res/configs/scraper_storage.yaml"
+    creds_file_path = "res/db-creds/scraper_storage.yaml"
     
     try:
         with open(creds_file_path, 'r') as f:
             creds = yaml.safe_load(f)
+            service_type = creds['service_type']
+            creds = creds['credentials']
     except Exception as e:
         raise Exception(e)
 
-    service_type = creds['service_type']
     # Connect to DB
     if service_type == 'mongo':
         myclient = pymongo.MongoClient(
-            host=creds['host'], ssl=True, ssl_ca_certs=creds['ssl_ca_certs_path'])
+            host=creds['host'], ssl=True, tlsCAFile=creds['ssl_ca_cert_path'])
         mydb = myclient[creds['database']]
         mycollection = mydb[collection]
         return mycollection

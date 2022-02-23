@@ -1,9 +1,0 @@
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: base-configs
-data:
-  configs: |
-    universe_collection = base.universe
-    redis_wqs: [class2_en_newsfilter]
