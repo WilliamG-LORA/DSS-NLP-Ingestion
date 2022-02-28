@@ -44,12 +44,15 @@ def update_universe(universe_collection):
         except Exception as e:
                 logging.error(e.args)
 
-# TODO: Implement functions in RedisWQ module and test.
+# DONE: Implement functions in RedisWQ module and test.
 def populate_wq(tickers: List[str], name: str):
     wq = RedisWQ(name=name, host=os.getenv("REDIS_SERVICE_HOST"))
-    # ? Reset wq
+    # Clean up the work queue.
+    wq.cleanup()
+
+    # Add the item to the work queue
     for ticker in tickers:
-        wq.add_task()
+        wq.add_task(ticker)
 
 
 def main():

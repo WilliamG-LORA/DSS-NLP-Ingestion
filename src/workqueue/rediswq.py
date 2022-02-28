@@ -56,20 +56,45 @@ class RedisWQ(object):
         """
         return self._main_qsize() == 0 and self._processing_qsize() == 0
 
-# TODO: implement this
-#    def check_expired_leases(self):
-#        """Return to the work queueReturn True if the queue is empty, False otherwise."""
-#        # Processing list should not be _too_ long since it is approximately as long
-#        # as the number of active and recently active workers.
-#        processing = self._db.lrange(self._processing_q_key, 0, -1)
-#        for item in processing:
-#          # If the lease key is not present for an item (it expired or was 
-#          # never created because the client crashed before creating it)
-#          # then move the item back to the main queue so others can work on it.
-#          if not self._lease_exists(item):
-#            TODO: transactionally move the key from processing queue to
+# DONE: implement this
+    def check_expired_leases(self):
+        """Return to the work queue. Return True if the queue is empty, False otherwise."""
+        # Processing list should not be _too_ long since it is approximately as long
+        # as the number of active and recently active workers.
+        processing = self._db.lrange(self._processing_q_key, 0, -1)
+        for item in processing:
+            # If the lease key is not present for an item (it expired or was 
+            # never created because the client crashed before creating it)
+            # then move the item back to the main queue so others can work on it.
+            if not self._lease_exists(item):
+                # Remove from the processing queue
+                self._processing_q_key.lrem(item,0)
+                # Add the item into the back of the main queue
+                self._main_q_key.rpush(item)
+
+#            Done: transactionally move the key from processing queue to
 #            to main queue, while detecting if a new lease is created
 #            or if either queue is modified.
+    def _process_to_main_q_(self, item):
+        # Check if the item is in the process queue
+        atomic_action = self._db.pipeline()
+        
+        if atomic_action.lrem(self._processing_q_key,item,0) != 0:
+            # Item is in the process queue, Check if there is any lease created
+            if not atomic_action.exists(self._lease_key_prefix + self._itemkey(item)):
+                # If lease not exists (i.e. the worker crashed), move it to the end of the main queue
+                self.add_task(item)
+                print("[_process_to_main_q_] Item has been added to the main queue")
+                return True
+            else:
+                print("[_process_to_main_q_] Item has been finished processing")
+                return False
+        else:
+            print("[_process_to_main_q_] Item not found in process queue")
+            return False
+
+        
+
 
     def _itemkey(self, item):
         """Returns a string that uniquely identifies an item (bytes)."""
@@ -114,22 +139,40 @@ class RedisWQ(object):
         itemkey = self._itemkey(value)
         self._db.delete(self._lease_key_prefix + itemkey)
 
-    # TODO: add functions to clean up all keys associated with "name" when
+    # DONE: add functions to clean up all keys associated with "name" when
     # processing is complete.
-    def cleanup():
-        pass
+    def cleanup(self):
+        for key in self._db.scan_iter(f"{self._main_q_key}:*"):
+            self._db.delete(key)
+        print("[add_task] Queue has already been cleared")
 
-    # TODO: add a function to add an item to the queue.  Atomically
+
+    # DONE: add a function to add an item to the queue.  Atomically
     # check if the queue is empty and if so fail to add the item
     # since other workers might think work is done and be in the process
     # of exiting.
-    def add_task(item):
-        pass
+    # For transcation operation, see https://redis.io/topics/transactions.
+    def add_task(self,item):
+        # Check if the queue is empty
+        atomic_action = self._db.pipeline()
+        if not (atomic_action.llen(self._main_q_key) == 0 and atomic_action.llen(self._processing_q_key) == 0):
+            # Start atomic action
+            # Add item to the main queue
+            atomic_action.rpush(self._main_q_key,item)
+            # Excute the task
+            atomic_action.execute()
+            return True
+        else:
+            # Release the lock
+            atomic_action.execute()
+            print("[add_task] Queue has already been emptied")
+            return False
 
 
-# TODO(etune): move to my own github for hosting, e.g. github.com/erictune/rediswq-py and
+# Depracated
+# Depracated(etune): move to my own github for hosting, e.g. github.com/erictune/rediswq-py and
 # make it so it can be pip installed by anyone (see
 # http://stackoverflow.com/questions/8247605/configuring-so-that-pip-install-can-work-from-github)
 
-# TODO(etune): finish code to GC expired leases, and call periodically
+# Depracated(etune): finish code to GC expired leases, and call periodically
 #  e.g. each time lease times out.

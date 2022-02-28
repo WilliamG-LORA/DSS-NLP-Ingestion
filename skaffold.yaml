@@ -9,7 +9,6 @@ deploy:
     manifests:
     - deploy/jobs/worker.yaml
 
-
 profiles:
 - name: minikube
   activation:
