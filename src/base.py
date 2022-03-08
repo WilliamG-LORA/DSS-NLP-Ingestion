@@ -195,7 +195,6 @@ class Lurker(ABC):
             # Get documents
             for query in scraper_iter:
                 success = self.get_document(query, **scraper_params)
-                scraper_iter.send(success)
 
             end_doc_count = self.mongo_collection.count_documents({})
             self.logger.info(f'{source} fininshes running successfully! {end_doc_count-start_doc_count} records inserted.')

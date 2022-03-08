@@ -35,7 +35,7 @@ class Reddit(Lurker):
         duration (int): Optional, the duration of the documents you want to scrape from.
 
     """
-    def __init__(self, tickers, duration = 7):
+    def __init__(self, ticker, duration = 7):
         # Set logger
         log_fmt = '%(asctime)s %(levelname)s %(message)s'
         logging.basicConfig(level=logging.INFO, format=log_fmt)
@@ -60,7 +60,7 @@ class Reddit(Lurker):
             self.successful_queries = [] #TODO
             self.failed_queries = []    #TODO
 
-            self.tickers = tickers
+            self.ticker = ticker
 
         except Exception as e:
             self.logger.error(e)
@@ -74,12 +74,10 @@ class Reddit(Lurker):
         Yields:
             Generator[str, None, None]: queries needed by get_document()
         """
-
-        for ticker in self.tickers:
-            for j in range(self.DURATION):
-                
-                queryString = f'symbols:{ticker} AND publishedAt:[now-{j}d/d TO *]  AND NOT title:\"4 Form\"'
-                yield queryString
+        for j in range(self.DURATION):
+            
+            queryString = f'symbols:{self.ticker} AND publishedAt:[now-{j}d/d TO *]  AND NOT title:\"4 Form\"'
+            yield queryString
 
     def get_scraper_params(self) -> dict:
         """
