@@ -114,13 +114,12 @@ def get_stock_list():
     return list(get_sector_dict().keys())
 
 # ! WIP
-def get_sector_dict():
+def get_sector_dict(sector_dict): 
     """
-    get each symbol's corresponding sector (AMZN -> 10101010)
+    get each symbol's corresponding sector using ICB code (AMZN -> 10101010)
     """
-    with open('resource/stocks/sector_dict.json') as json_file:
-        sector_dict = json.load(json_file)
-    return sector_dict
+    # Return the pymongo cursor object
+    return sector_dict.find()
 
 
 # ! WIP

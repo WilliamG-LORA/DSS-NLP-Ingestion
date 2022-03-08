@@ -5,6 +5,7 @@ import logging
 from utils.general_utils import get_configs
 from utils.database_utils import connect_to_mongodb
 import os
+import itertools
 
 log_fmt = '%(asctime)s %(levelname)s %(message)s'
 logging.basicConfig(level=logging.INFO, format=log_fmt)
@@ -42,7 +43,7 @@ def update_universe(universe_collection):
                 'currency_code': res[i][4]
             })
         except Exception as e:
-                logging.error(e.args)
+            logging.error(e.args)
 
 # DONE: Implement functions in RedisWQ module and test.
 def populate_wq(tickers: List[str], name: str):
@@ -58,14 +59,22 @@ def populate_wq(tickers: List[str], name: str):
 def main():
     config = get_configs('res/configs/setup_configs.yaml')
     universe_collection = connect_to_mongodb(config['universe_collection'])
-    redis_wqs = config['redis_wqs']
+    redis_wqs = config['redis_wqs'] # One Global Queue
+    lurkers_collection = config['lurkers_collection']
+    
     # Update universe
     update_universe(universe_collection=universe_collection)
 
     # Populate RedisWQ
     tickers = universe_collection.distinct('ticker_symbol')
-    for wq in redis_wqs:
-        populate_wq(tickers, wq)
+
+    tickers = itertools.islice(tickers,10)
+
+    # For give the work to a specific type of lurker
+    for lurker in lurkers_collection:
+        # Each lurker will try to scrape the universe
+        payload = [ f"{lurker}:{ticker}" for ticker in tickers]
+        populate_wq(payload, redis_wqs)
 
 if __name__ == "__main__":
     main()

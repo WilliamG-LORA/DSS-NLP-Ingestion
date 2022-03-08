@@ -27,22 +27,28 @@ class RedditMongoDoc(MongoDocDefaultsBase, __RedditMongoDocBase):
 
 class Reddit(Lurker):
     """
-    TODO: ...
+
+    Reddit Lurker class
+
+    Args:
+        ticker (list): The ticker(s) you want to scrape from.
+        duration (int): Optional, the duration of the documents you want to scrape from.
+
     """
-    def __init__(self, duration = 7):
+    def __init__(self, tickers, duration = 7):
         # Set logger
         log_fmt = '%(asctime)s %(levelname)s %(message)s'
         logging.basicConfig(level=logging.INFO, format=log_fmt)
         logger = logging.getLogger(__name__)
 
-        try:
-            # Base Class Parameters
-            configs = get_configs('res/configs/newsfilter_configs.yaml')
-            super().__init__(configs, logger)
-            
+        # Base Class Parameters
+        configs = get_configs('res/configs/newsfilter-configs.yaml')
+        super().__init__(configs, logger)
+
+        try:            
             # Subclass Params
             api_configs = configs['api']
-            
+
             self.DURATION = duration
             self.NUM_RETRIES = configs['num_retries']
             self.API_KEY = api_configs['key']
@@ -53,6 +59,8 @@ class Reddit(Lurker):
 
             self.successful_queries = [] #TODO
             self.failed_queries = []    #TODO
+
+            self.tickers = tickers
 
         except Exception as e:
             self.logger.error(e)
@@ -66,8 +74,8 @@ class Reddit(Lurker):
         Yields:
             Generator[str, None, None]: queries needed by get_document()
         """
-        for ticker in self.__get_next_ticker():
-            self.logger.debug(f"Pulled {ticker} from {self.redis_list_name} work-queue")
+
+        for ticker in self.tickers:
             for j in range(self.DURATION):
                 
                 queryString = f'symbols:{ticker} AND publishedAt:[now-{j}d/d TO *]  AND NOT title:\"4 Form\"'
@@ -107,7 +115,7 @@ class Reddit(Lurker):
             content = BeautifulSoup((response.text), 'lxml').get_text()
         return content
 
-    def __get_document(self, query, **kwargs):
+    def get_document(self, query, **kwargs):
 
         payload = {
             "type": "filterArticles",
@@ -136,7 +144,10 @@ class Reddit(Lurker):
                 content = None
         
         if content is None:
-            self.logger.warning(f"Failed to Connect. {query=}")
+            self.logger.warning(f"Failed to Connect. {query}")
+            return
+        elif content['message'].startswith("You tried to access the API without a valid API key."):
+            self.logger.warning(f"Failed to Connect. {content['message']}")
             return
         
         total_articles = content['total']['value']
@@ -184,7 +195,7 @@ class Reddit(Lurker):
                 
             except Exception as e:
                 failed_payloads += 1
-                self.logger.info(f"Payload failed to migrate to mongo. {failed_payloads=}; {query=}")
+                self.logger.info(f"Payload failed to migrate to mongo. {failed_payloads}; {query}")
                 self.logger.debug(f"Failed Insertion into Mongo: {e}")
             else:
                 successful_payloads+=1

@@ -1,5 +1,7 @@
 # Contains the abstract class from which lurkers will inherit from
-
+"""
+    A Lurker will accept a ticker, and return the document regarding the given ticker
+"""
 __author__ = "Srijan Saxena"
 __email__ = "srijan@loratechai.com"
 
@@ -17,6 +19,12 @@ from res.models.datamodels import ESAction, ESDoc
 from abc import ABC, abstractmethod
 from datetime import datetime
 from utils.general_utils import get_configs
+
+# Lurkers
+from lurkers import *
+
+# String to Class
+import sys
 
 # Import grpc dependencies
 # import grpc
@@ -41,7 +49,7 @@ class Lurker(ABC):
         self.logger.info("Connecting to microservices..")
         try:
             # Get Configs
-            base_config = get_configs('res/configs/base_configs.yaml')
+            base_config = get_configs('res/configs/base-configs.yaml')
             # options = get_grpc_options()
 
             # # GPT-K Connection
@@ -72,34 +80,16 @@ class Lurker(ABC):
             self.logger.error(e)
             raise e
 
-    def __get_next_ticker(self) -> Generator[str, bool, None]:
-        """
-        Generator that fetches the next task from Redis Work Queue.
-
-        Yields:
-            Generator[str, None, None]: Items in the queue worked on by this pod.
-        """
-        wq = RedisWQ(name=self.REDIS_LIST_NAME, host=self.REDIS_HOST)
-
-        self.logger.info(f"Worker with sessionID: {wq.sessionID()}")
-        self.logger.info(f"Initial queue state: empty= {wq.empty()}")
-
-        while not wq.empty():
-            item = wq.lease(lease_secs=10, block=True, timeout=2) 
-            if item is not None:
-                itemstr = item.decode("utf-8")
-                self.logger.info("Working on {itemstr}")
-                success = yield itemstr
-                if success:
-                    wq.complete(item)
-            else:
-                self.logger.info("Waiting for work")
-        self.logger.info("Queue empty, exiting")
 
     @abstractmethod
-    def scraper_iterator(self) -> Generator[str, bool, None]:
+    def scraper_iterator(self,ticker) -> Generator[str, bool, None]:
         """
         Abstract Method. Generator Function that returns queries needed by scraper.
+
+        NOTE: This method is to cater scraper that requires more than one query for each tickers (i.e. Pagnations)
+
+        Args:
+            ticker (str): The ticker
 
         Yields:
             Generator[str, None, None]: queries needed by get_document()
@@ -117,7 +107,7 @@ class Lurker(ABC):
         return {}
 
     @abstractmethod
-    def __get_document(self, query, **kwargs) -> bool:
+    def get_document(self, query, **kwargs) -> bool:
         """
         Abstract Method. Scrapes and returns document scraped using query.
 
@@ -185,71 +175,6 @@ class Lurker(ABC):
 
             yield asdict(action)        
 
-    # ! DEPRECATED.
-    @staticmethod
-    def scraper(get_document_unbounded):
-        """
-        Decorator method for subclass document scraper.
-
-        Args:
-            get_document_unbounded (function): subclass document scraper method unbounded to its instance.
-
-        Raises:
-            e: Exception
-
-        Returns:
-            function: decorated function.
-        """
-        @wraps(get_document_unbounded)
-        def scraper_wrapper(self):
-            try:
-                source = self.__class__.__name__
-
-                start_doc_count = self.mongo_collection.count_documents({})
-                self.logger.info(f'{source} running...')
-
-                # Get iterator for subclass scraper
-                scraper_iter = self.scraper_iterator()
-
-                # Get **kwargs for subclass scraper
-                scraper_params = self.get_scraper_params()
-
-                # Bound get_document to instance
-                get_document = get_document_unbounded.__get__(type(self), self)
-
-                # Get documents
-                for query in scraper_iter:
-                    get_document(query, **scraper_params)
-
-                end_doc_count = self.mongo_collection.count_documents({})
-                self.logger.info(f'{source} fininshes running successfully! {end_doc_count-start_doc_count} records inserted.')
-
-                # Migrate to ES
-                self.logger.info("Migrating {num_docs} docs to ES...")
-
-                num_docs_to_migrate = self.mongo_collection.count_documents({"just_insert": True})
-                successes, failures, errors = bulk_migrate_to_es(
-                    mongo_collection= self.mongo_collection,
-                    es_index= self.ES_INDEX,
-                    actions= self.generate_es_actions(),
-                )
-
-                self.logger.info(
-                    f'''Successfully migrated {successes} ({successes/num_docs_to_migrate}) docs to ES. 
-                    {failures} ({failures/num_docs_to_migrate}) docs failed.
-                    '''
-                )
-                self.logger.debug(
-                    f'''Failed documents:
-                    {json.dumps(errors)}
-                    '''
-                )
-
-            except Exception as e:
-                raise e
-
-        return scraper_wrapper
-
     def scrape(self):
         try:
             source = self.__class__.__name__
@@ -295,20 +220,115 @@ class Lurker(ABC):
         except Exception as e:
             raise e
 
-    def send_data_to_GPTK(self, data, source):
-        """
-        Sends scraped data to GPT-K
-        """
-        #TODO
-        request = GPTKIngressRequest(data=data, source=source, timestamp=str(time.time()), clean=True)
-        response = self.gptk_client.sendData(request)
-        return(response.success)
 
-    def send_data_to_SHC(self, data):
-        """
-        Sends scraped data to Stock Hotness Calculator
-        """
-        #TODO
-        request = SHCIngressRequest(data=data, timestamp=str(time.time()))
-        response = self.shc_client.sendData(request)
-        return(response.success)
+"""
+Deprecated Code 
+"""
+
+    # @staticmethod
+    # def scraper(get_document_unbounded):
+    #     """
+    #     Decorator method for subclass document scraper.
+
+    #     Args:
+    #         get_document_unbounded (function): subclass document scraper method unbounded to its instance.
+
+    #     Raises:
+    #         e: Exception
+
+    #     Returns:
+    #         function: decorated function.
+    #     """
+    #     @wraps(get_document_unbounded)
+    #     def scraper_wrapper(self):
+    #         try:
+    #             source = self.__class__.__name__
+
+    #             start_doc_count = self.mongo_collection.count_documents({})
+    #             self.logger.info(f'{source} running...')
+
+    #             # Get iterator for subclass scraper
+    #             scraper_iter = self.scraper_iterator()
+
+    #             # Get **kwargs for subclass scraper
+    #             scraper_params = self.get_scraper_params()
+
+    #             # Bound get_document to instance
+    #             get_document = get_document_unbounded.__get__(type(self), self)
+
+    #             # Get documents
+    #             for query in scraper_iter:
+    #                 get_document(query, **scraper_params)
+
+    #             end_doc_count = self.mongo_collection.count_documents({})
+    #             self.logger.info(f'{source} fininshes running successfully! {end_doc_count-start_doc_count} records inserted.')
+
+    #             # Migrate to ES
+    #             self.logger.info("Migrating {num_docs} docs to ES...")
+
+    #             num_docs_to_migrate = self.mongo_collection.count_documents({"just_insert": True})
+    #             successes, failures, errors = bulk_migrate_to_es(
+    #                 mongo_collection= self.mongo_collection,
+    #                 es_index= self.ES_INDEX,
+    #                 actions= self.generate_es_actions(),
+    #             )
+
+    #             self.logger.info(
+    #                 f'''Successfully migrated {successes} ({successes/num_docs_to_migrate}) docs to ES. 
+    #                 {failures} ({failures/num_docs_to_migrate}) docs failed.
+    #                 '''
+    #             )
+    #             self.logger.debug(
+    #                 f'''Failed documents:
+    #                 {json.dumps(errors)}
+    #                 '''
+    #             )
+
+    #         except Exception as e:
+    #             raise e
+
+    #     return scraper_wrapper
+
+    # def __get_next_ticker(self) -> Generator[str, bool, None]:
+    #     """
+    #     Generator that fetches the next task from Redis Work Queue.
+
+    #     Yields:
+    #         Generator[str, None, None]: Items in the queue worked on by this pod.
+    #     """
+    #     wq = RedisWQ(name=self.REDIS_LIST_NAME, host=self.REDIS_HOST)
+
+    #     self.logger.info(f"Worker with sessionID: {wq.sessionID()}")
+    #     self.logger.info(f"Initial queue state: empty= {wq.empty()}")
+
+    #     while not wq.empty():
+    #         item = wq.lease(lease_secs=10, block=True, timeout=2) 
+    #         if item is not None:
+    #             itemstr = item.decode("utf-8")
+    #             self.logger.info(f"Working on {itemstr}")
+    #             # We yield itemstr and receive success message
+    #             success = yield itemstr
+    #             if success:
+    #                 # we mark the message as success
+    #                 wq.complete(item)
+    #         else:
+    #             self.logger.info("Waiting for work")
+    #     self.logger.info("Queue empty, exiting")
+
+    # def send_data_to_GPTK(self, data, source):
+    #     """
+    #     Sends scraped data to GPT-K
+    #     """
+    #     #TODO
+    #     request = GPTKIngressRequest(data=data, source=source, timestamp=str(time.time()), clean=True)
+    #     response = self.gptk_client.sendData(request)
+    #     return(response.success)
+
+    # def send_data_to_SHC(self, data):
+    #     """
+    #     Sends scraped data to Stock Hotness Calculator
+    #     """
+    #     #TODO
+    #     request = SHCIngressRequest(data=data, timestamp=str(time.time()))
+    #     response = self.shc_client.sendData(request)
+    #     return(response.success)

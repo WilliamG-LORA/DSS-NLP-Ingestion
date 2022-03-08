@@ -10,7 +10,7 @@ data:
     class: 2
     mongo_collection: lurkers.class2.en.newsfilter
     es_index: nlp-scrapedata-class2-newsfilter
-    redis_list_name: class2_en_newsfilter
+    redis_list_name: global_queues
     api:
       key: e3eff06eee5d4e6181a14fb310ec72592ff157b6253f4d4fb15f414fba698f25
       query_api: https://api.newsfilter.io/public/actions
@@ -20,7 +20,7 @@ data:
     class: 3
     mongo_collection: lurkers.class3.en.reddit
     es_index: nlp-scrapedata-class3-reddit
-    redis_list_name: class3_en_reddit
+    redis_list_name: global_queues
     api: https://api.pushshift.io/reddit/search/submission/
     data_source:
       - wallstreetbets
@@ -31,4 +31,7 @@ data:
     num_retries: 10
   setup-configs: |
     universe_collection: base.universe
-    redis_wqs: [class2_en_newsfilter]
+    redis_wqs: global_queues
+    lurkers_collection: 
+      - newsfilter
+      - reddit
