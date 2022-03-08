@@ -28,7 +28,7 @@ kind: Job
 metadata:
   name: lurker
 spec:
-  parallelism: 1
+  parallelism: 2
   template:
     metadata:
       name: lurker

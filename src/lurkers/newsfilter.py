@@ -143,7 +143,7 @@ class Newsfilter(Lurker):
         if content is None:
             self.logger.warning(f"Failed to Connect. {query}")
             return
-        elif content['message'].startswith("You tried to access the API without a valid API key."):
+        elif 'message' in content:
             self.logger.warning(f"Failed to Connect. {content['message']}")
             return
 

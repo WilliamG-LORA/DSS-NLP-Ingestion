@@ -66,12 +66,16 @@ class Lurker(ABC):
             self.universe_collection = connect_to_mongodb(base_config['universe_collection'])
             self.mongo_collection =  connect_to_mongodb(subclass_config['mongo_collection'])
 
+            # Setup Config
+            setup_configs = get_configs('res/configs/setup-configs.yaml')
+
             # ElasticSearch Param
             self.ES_INDEX = subclass_config['es_index']
 
             # Redis Params
             self.REDIS_HOST = os.getenv("REDIS_SERVICE_HOST")
-            self.REDIS_LIST_NAME = subclass_config['redis_list_name']
+            # Queue name
+            self.REDIS_LIST_NAME = setup_configs['redis_wqs']
 
             # Subclass Params
             self.SOURCE_CLASS = subclass_config['class']
@@ -197,25 +201,25 @@ class Lurker(ABC):
             self.logger.info(f'{source} fininshes running successfully! {end_doc_count-start_doc_count} records inserted.')
 
             # Migrate to ES
-            self.logger.info("Migrating {num_docs} docs to ES...")
+            # self.logger.info("Migrating {num_docs} docs to ES...")
 
-            num_docs_to_migrate = self.mongo_collection.count_documents({"just_insert": True})
-            successes, failures, errors = bulk_migrate_to_es(
-                mongo_collection= self.mongo_collection,
-                es_index= self.ES_INDEX,
-                actions= self.generate_es_actions(),
-            )
+            # num_docs_to_migrate = self.mongo_collection.count_documents({"just_insert": True})
+            # successes, failures, errors = bulk_migrate_to_es(
+            #     mongo_collection= self.mongo_collection,
+            #     es_index= self.ES_INDEX,
+            #     actions= self.generate_es_actions(),
+            # )
 
-            self.logger.info(
-                f'''Successfully migrated {successes} ({successes/num_docs_to_migrate}) docs to ES. 
-                {failures} ({failures/num_docs_to_migrate}) docs failed.
-                '''
-            )
-            self.logger.debug(
-                f'''Failed documents:
-                {json.dumps(errors)}
-                '''
-            )
+            # self.logger.info(
+            #     f'''Successfully migrated {successes} ({successes/num_docs_to_migrate}) docs to ES. 
+            #     {failures} ({failures/num_docs_to_migrate}) docs failed.
+            #     '''
+            # )
+            # self.logger.debug(
+            #     f'''Failed documents:
+            #     {json.dumps(errors)}
+            #     '''
+            # )
 
         except Exception as e:
             raise e

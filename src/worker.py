@@ -49,13 +49,13 @@ class Worker():
     def lurkerJob(self,lurker_type, ticker):
         # Select Lurker job
         if lurker_type == "newsfilter":
-            lurker = Newsfilter()
+            lurker = Newsfilter(ticker)
         elif lurker_type == "reddit":
-            lurker = Reddit()
+            lurker = Reddit(ticker)
         else:
             self.logger.error(f"Invalid Lurker Type: {lurker_type}")
 
-        result = lurker.scrape(ticker)
+        result = lurker.scrape()
         return result
 
     def doWork(self):
@@ -63,8 +63,6 @@ class Worker():
             source = self.__class__.__name__
 
             self.logger.info(f'{source} running...')
-
-            print("hello from doWork!")
 
             wq = RedisWQ(name=self.REDIS_WQS, host=self.REDIS_HOST)
             print("Worker with sessionID: " +  wq.sessionID())
@@ -81,12 +79,11 @@ class Worker():
                         self.logger.info(f"Item is string: {item}")
                         itemstr = item
 
-
                     lurker_type, ticker = itemstr.split(":")
 
                     # Pass params to lurker
                     print(f"[{lurker_type}] on {ticker}")
-                    # self.lurkerJob(lurker_type, ticker)
+                    self.lurkerJob(lurker_type, ticker)
 
                     wq.complete(item)
                 else:
