@@ -1,2 +1,4 @@
 from .newsfilter import Newsfilter
-from .reddit import Reddit
+from .aastocks import AAstocks
+from .etnet import Etnet
+from .eastmoney import EastMoney

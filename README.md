@@ -55,3 +55,18 @@ $ skaffold dev
 NOTE: This command needs to be run from the root directory (i.e. DSS-NLP-Ingestion/).
 
 **Settings**
+The config files are located inside the "deploy" folder, which consist of multiple config files
+
+```
+deploy
+├── configmaps
+│   └── configs.yaml            # config for pods
+├── jobs
+│   ├── garbage_collector.yaml  # kubeconfig 
+│   ├── init-workqueue.yaml     # kubeconfig 
+│   └── worker.yaml             # kubeconfig 
+├── microservices
+│   └── redis.yaml              # kubeconfig
+└── secrets
+    └── db-creds.yaml           # db-creds in base64 format
+```

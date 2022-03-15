@@ -23,12 +23,6 @@ spec:
           configMap:
             name: configs
             items:
-            - key: base-configs
-              path: base_configs.yaml
-            - key: newsfilter-configs
-              path: newsfilter_configs.yaml
-            - key: reddit-configs
-              path: reddit_configs.yaml
             - key: setup-configs
               path: setup_configs.yaml
         - name: db-creds

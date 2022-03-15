@@ -56,9 +56,6 @@ class Newsfilter(Lurker):
 
             self.sector_dict = get_sector_dict(self.universe_collection)
 
-            self.successful_queries = [] #TODO
-            self.failed_queries = []    #TODO
-
             self.ticker = ticker
 
         except Exception as e:
@@ -147,14 +144,11 @@ class Newsfilter(Lurker):
             return
 
         total_articles = content['total']['value']
-        successful_payloads = 0
-        failed_payloads = 0
 
         while payload['from'] < total_articles:
             payload['from'] += payload['size']
 
             articles = content['articles']
-            record_list = []
             for article in articles:
                 source_id = article['id']
                 if self.mongo_collection.find_one({'_id': source_id}) != None:
@@ -184,21 +178,8 @@ class Newsfilter(Lurker):
                     source=source
                 )
 
-                record_list.append(asdict(doc))
-
-            try:
-                self.mongo_collection.insert_many(record_list, ordered=False)
-                
-            except Exception as e:
-                failed_payloads += 1
-                self.logger.info(f"Payload failed to migrate to mongo. {failed_payloads}; {query}")
-                self.logger.debug(f"Failed Insertion into Mongo: {e}")
-            else:
-                successful_payloads+=1
-
-        if total_articles and not successful_payloads:
-            self.successful_queries.append(query)
-            return True
-        else:
-            self.failed_queries.append(query)
-            return False
+                try:
+                    self.successful_documents.append(asdict(doc))
+                    self.successful_queries.append(query)
+                except Exception as e:
+                    self.failed_queries.append(query)

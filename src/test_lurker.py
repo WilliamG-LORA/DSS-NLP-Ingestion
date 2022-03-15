@@ -1,7 +1,8 @@
 from lurkers import *
 
 def main():
-    lurker = Newsfilter('0001')
+    print("Lurker Test")
+    lurker = EastMoney()
     lurker.scrape()
 
 if __name__ == '__main__':

@@ -12,7 +12,6 @@ from utils.general_utils import get_configs, get_sector_dict, get_sector_loose
 import logging
 from datetime import datetime
 
-# TODO
 @dataclass
 class __RedditMongoDocBase(MongoDocBase):
     title: str
@@ -42,7 +41,7 @@ class Reddit(Lurker):
         logger = logging.getLogger(__name__)
 
         # Base Class Parameters
-        configs = get_configs('res/configs/newsfilter-configs.yaml')
+        configs = get_configs('res/configs/reddit-configs.yaml')
         super().__init__(configs, logger)
 
         try:            
@@ -57,9 +56,6 @@ class Reddit(Lurker):
 
             self.sector_dict = get_sector_dict(self.universe_collection)
 
-            self.successful_queries = [] #TODO
-            self.failed_queries = []    #TODO
-
             self.ticker = ticker
 
         except Exception as e:
@@ -69,13 +65,12 @@ class Reddit(Lurker):
     def scraper_iterator(self) -> Generator[str, None, None]:
         """
         Implementation of Abstract Method. Generator Function that returns queries needed by scraper.
-        * The format for the query string is at https://developers.newsfilter.io/docs/news-query-api-request-response-formats.html#request-format
+        * The format for the query string is at https://developers.reddit.io/docs/news-query-api-request-response-formats.html#request-format
         
         Yields:
             Generator[str, None, None]: queries needed by get_document()
         """
         for j in range(self.DURATION):
-            
             queryString = f'symbols:{self.ticker} AND publishedAt:[now-{j}d/d TO *]  AND NOT title:\"4 Form\"'
             yield queryString
 
@@ -113,7 +108,7 @@ class Reddit(Lurker):
             content = BeautifulSoup((response.text), 'lxml').get_text()
         return content
 
-    def get_document(self, query, **kwargs):
+    def get_document(self, query, **kwargs) -> bool:
 
         payload = {
             "type": "filterArticles",
@@ -147,16 +142,13 @@ class Reddit(Lurker):
         elif 'message' in content:
             self.logger.warning(f"Failed to Connect. {content['message']}")
             return
-        
+
         total_articles = content['total']['value']
-        successful_payloads = 0
-        failed_payloads = 0
 
         while payload['from'] < total_articles:
             payload['from'] += payload['size']
 
             articles = content['articles']
-            record_list = []
             for article in articles:
                 source_id = article['id']
                 if self.mongo_collection.find_one({'_id': source_id}) != None:
@@ -172,7 +164,7 @@ class Reddit(Lurker):
                 text_hash = str(hash(title+description+text))
                 sentiment = None
 
-                doc = NewsfilterMongoDoc(
+                doc = RedditMongoDoc(
                     tickers = tickers,
                     sentiment=sentiment,
                     sector_code=sector_code,
@@ -186,19 +178,8 @@ class Reddit(Lurker):
                     source=source
                 )
 
-                record_list.append(asdict(doc))
-
-            try:
-                self.mongo_collection.insert_many(record_list, ordered=False)
-                
-            except Exception as e:
-                failed_payloads += 1
-                self.logger.info(f"Payload failed to migrate to mongo. {failed_payloads}; {query}")
-                self.logger.debug(f"Failed Insertion into Mongo: {e}")
-            else:
-                successful_payloads+=1
-
-        if total_articles and not successful_payloads:
-            self.successful_queries.append(query)
-        else:
-            self.failed_queries.append(query)
+                try:
+                    self.successful_documents.append(asdict(doc))
+                    self.successful_queries.append(query)
+                except Exception as e:
+                    self.failed_queries.append(query)
