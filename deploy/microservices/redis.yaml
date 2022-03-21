@@ -18,6 +18,13 @@ spec:
           value: "true"
       ports:
         - containerPort: 6379
+      volumeMounts:
+        - mountPath: /data
+          name: redis-persistent
+  volumes:
+    - name: redis-persistent
+      hostPath:
+        path: redis-peristent
 
 ---
 apiVersion: v1

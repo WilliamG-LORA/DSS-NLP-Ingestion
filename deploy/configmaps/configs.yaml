@@ -51,5 +51,6 @@ data:
   setup-configs: |
     universe_collection: base.universe
     redis_wqs: global_queues
+    redis_history: global_history
     lurkers_collection: 
       - newsfilter

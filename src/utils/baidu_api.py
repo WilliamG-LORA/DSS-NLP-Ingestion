@@ -94,7 +94,7 @@ class BaiduNLU():
                 config['API_KEY']
                 config['SECRET_KEY']
         """
-        self.client = AipNlp(config['APP_ID'], config['API_KEY'], config['SECRET_KEY'])
+        self.client = AipNlp(str(config['APP_ID']), str(config['API_KEY']), str(config['SECRET_KEY']))
    
 
     def print_dic(self, dic):

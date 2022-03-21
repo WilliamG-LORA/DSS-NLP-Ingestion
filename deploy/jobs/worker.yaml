@@ -43,7 +43,8 @@ spec:
       containers:
       - name: worker
         image: nlp-ingestion-worker
-        args: [ 'test_lurker.py' ] # TODO This should run the scrape() func from the lurker base class.
+        # args: [ 'test_lurker.py' ] # TODO This should run the scrape() func from the lurker base class.
+        args: [ '-m','unittest','discover', 'tests' ]
         volumeMounts:
           - name: configs
             mountPath: res/configs/

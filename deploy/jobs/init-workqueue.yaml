@@ -10,7 +10,7 @@ spec:
       containers:
       - name: init-workqueue
         image: nlp-ingestion-worker
-        args: [ 'setup.py' ]
+        args: [ 'workqueue_setup.py' ]
         volumeMounts:
           - name: configs
             mountPath: res/configs/

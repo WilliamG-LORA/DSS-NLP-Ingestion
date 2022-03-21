@@ -240,7 +240,7 @@ class Etnet(Lurker):
         
         # Get Title
         title = soup.find("p", class_="ArticleHdr")
-        title = title.text.strip()
+        title = str(title.text).strip()
         title = self.strQ2B(title)
 
         # Content

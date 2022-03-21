@@ -14,6 +14,7 @@ from functools import wraps
 from typing import Dict, Generator
 from dataclasses import asdict
 from workqueue.rediswq import RedisWQ
+from historydb.redislease import RedisLease
 from utils.database_utils import connect_to_mongodb, bulk_migrate_to_es
 from res.models.datamodels import ESAction, ESDoc
 from abc import ABC, abstractmethod
@@ -48,7 +49,7 @@ class Lurker(ABC):
         """
         self.logger = logger
 
-        self.logger.info("Connecting to microservices..")
+        # self.logger.info("Connecting to microservices..")
         try:
             # Get Configs
             base_config = get_configs('res/configs/base-configs.yaml')
@@ -72,12 +73,16 @@ class Lurker(ABC):
             setup_configs = get_configs('res/configs/setup-configs.yaml')
 
             # ElasticSearch Param
-            self.ES_INDEX = subclass_config['es_index']
+            # self.ES_INDEX = subclass_config['es_index']
 
             # Redis Params
-            self.REDIS_HOST = os.getenv("REDIS_SERVICE_HOST")
-            # Queue name
-            self.REDIS_LIST_NAME = setup_configs['redis_wqs']
+            try:
+                # Redis Params
+                self.REDIS_HOST = os.getenv("REDIS_SERVICE_HOST")
+                self.REDIS_HISTORY_DB = setup_configs['redis_history']
+            except Exception as e:
+                self.logger.error(e)
+                raise e
 
             # Subclass Params
             self.SOURCE_CLASS = subclass_config['class']
@@ -186,14 +191,48 @@ class Lurker(ABC):
 
             yield asdict(action)        
 
-    def isArticleExist(self, url):
+    def tryAddArticleToHistory(self, unique_identifier: str, lease_secs: 604800):
         """
-        # TODO: Implementation of a function that check if a record exists in the redis database
 
-        Returns:
-            bool: True if article is already in the database, False otherwise
+        This function add a article to the redis history database and store for 7 days (604800s)
+
+        Return: True if the article was added successfully, False otherwise.
         """
-        return True
+        histroy_db = RedisLease(name=self.REDIS_HISTORY_DB, host=self.REDIS_HOST)
+        return histroy_db.tryAdd(unique_identifier,lease_secs=lease_secs)
+
+    def dryrun(self):
+        """
+
+        Scrape the news but not push the result to the mongo database
+
+        """
+        try:
+            source = self.__class__.__name__
+
+            self.logger.info(f'{source} running...')
+
+            # Get iterator for subclass scraper
+            scraper_iter = self.scraper_iterator()
+
+            # Get **kwargs for subclass scraper
+            scraper_params = self.get_scraper_params()
+
+            # Get 1 document only
+            for query in scraper_iter:
+                success = self.get_document(query, **scraper_params)
+                if len(self.successful_documents) > 0:
+                    break
+
+            success_count = len(self.successful_queries)
+            fail_count = len(self.failed_queries)
+
+            self.logger.info(f'{source} fininshes running! {success_count} records inserted. {fail_count} records failed. ')
+ 
+            return True
+
+        except Exception as e:
+            raise e
 
     def scrape(self):
         try:
