@@ -11,7 +11,7 @@ This ingestion system consist of 5 main parts:
     - The worker will start pull the job item from the workqueue after the workqueue initializer is completed. Each job item contains the lurker type and the ticker. The lurker will then mutate into the lurker type and do the scrappering. After the job is finished, the worker will start pulling another job until the workqueus is empty.
 - **4. Workqueue Garbage Collector**
     - There might be a chance that the lurker is crashed due to some reason, and the job item will stay at the processing queue even after the job lease is expired. A workqueue garbage collector will move the ununattended job item back to the main queue every minute.
-- **5. (WIP) Duplication Checking**
+- **5. Duplication Checking**
     - There might be a possibility that a article is searched by multiple workers and we need to keep track of the scrape history within a time span. The duplication checking list will be held inside the redis server. The worker will check the duplication using the url of the scrapers. 
 
 ## Current available lurker
