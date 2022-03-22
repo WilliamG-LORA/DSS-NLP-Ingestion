@@ -47,7 +47,7 @@ data:
       APP_ID: 25576077
       API_KEY: iprdevAUKAE15tQkgEYpCyYQ
       SECRET_KEY: 64Zpk8fcpntYRsSyYfGmAoCMFvenGHi4
-    phantomjs_path: ./src/utils/phantomjs-2.1.1-linux-x86_64/bin/phantomjs
+    phantomjs_path: utils/phantomjs-2.1.1-linux-x86_64/bin/phantomjs
   setup-configs: |
     universe_collection: base.universe
     redis_wqs: global_queues
