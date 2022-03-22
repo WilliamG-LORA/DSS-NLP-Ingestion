@@ -77,3 +77,10 @@ class RedisLease(object):
                     return False
             else:
                 return False
+
+    # DONE: add functions to clean up all keys associated with "name" when
+    # processing is complete.
+    def cleanup(self):
+        for key in self._db.scan_iter(f"{self._lease_key_prefix}:*"):
+            self._db.delete(key)
+        print("Lease history has already been cleared")

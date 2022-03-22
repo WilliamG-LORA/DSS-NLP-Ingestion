@@ -107,11 +107,11 @@ def get_configs(config_path: str):
     return config
 
 # ! WIP
-def get_stock_list():
+def get_stock_list(mongodb_cursor):
     """
     get 556 stocks' symbols (AMZN)
     """
-    return list(get_sector_dict().keys())
+    return [item['ticker_symbol'] for item in mongodb_cursor.find({},{"_id": 0,"ticker_symbol": 1})]
 
 # ! WIP
 def get_sector_dict(sector_dict): 

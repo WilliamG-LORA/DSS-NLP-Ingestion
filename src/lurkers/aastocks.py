@@ -22,6 +22,7 @@ import urllib
 from utils.general_utils import get_configs, get_sector_dict, get_sector_loose
 import logging
 from datetime import datetime
+import re
 
 @dataclass
 class __AAstocksMongoDocBase(MongoDocBase):
@@ -44,7 +45,7 @@ class AAstocks(Lurker):
         duration (int): Optional, the duration of the documents you want to scrape from.
 
     """
-    def __init__(self, ticker):
+    def __init__(self, ticker, **kwargs):
         # Set logger
         log_fmt = '%(asctime)s %(levelname)s %(message)s'
         logging.basicConfig(level=logging.INFO, format=log_fmt)
@@ -52,7 +53,7 @@ class AAstocks(Lurker):
 
         # Base Class Parameters
         configs = get_configs('res/configs/aastocks-configs.yaml')
-        super().__init__(configs, logger)
+        super().__init__(configs, logger, **kwargs)
 
         try:            
             # Subclass Params (Optional)
@@ -130,93 +131,108 @@ class AAstocks(Lurker):
         Returns:
             bool: True if all articles(s) are successfully scraped, False otherwise
         """
+        
+        m = re.search('(NOW.[0-9]*)', query)
+        if m:
+            article_id = m.group(1)
+        else:
+            return False
 
-        for _ in range(self.NUM_RETRIES):
+        # Get UniqueIdentifier
+        unique_identifier = self.tryAddArticleToHistory(article_id)
+
+        if unique_identifier:
+
+            for _ in range(self.NUM_RETRIES):
+                try:
+                    response = requests.get(query,proxies=urllib.request.getproxies())
+                    if response.status_code == 200:
+                        page = response
+                        break
+                except requests.exceptions.RequestException as e:
+                    content = None
+            
+            if page is None:
+                self.logger.warning(f"Failed to Connect. {query}")
+                return
+
+            soup = BeautifulSoup(page.content, "html.parser")
+
+            # Get Title
+            title = soup.find_all("div", class_="newshead5")
+            title = title[0].text.strip()
+            
+            # Get Ticker List
+            tickers = soup.find_all('a', class_="jsStock")
+            ticker_list = list()
+            
+            # Get Sentiment
+            like = soup.find("div", class_='divRecommend').find('div',class_='value').text
+            pos = soup.find("div", class_="divBullish").find('div',class_='value').text
+            neg = soup.find("div", class_="divBearish").find('div',class_='value').text
+
+            sentiment = {"like": like, "pos": pos, "neg": neg}
+
+            for ticker in tickers:
+                ticker_list.append(ticker['sym'].strip())
+
+            if len(ticker_list) == 0:
+                ticker_list.append(self.ticker)
+
+            ticker_list = self._getTickerCode(ticker_list)
+
+            # Content
+            text = soup.find(id="spanContent")
+            
             try:
-                response = requests.get(query,proxies=urllib.request.getproxies())
-                if response.status_code == 200:
-                    page = response
-                    break
-            except requests.exceptions.RequestException as e:
-                content = None
-        
-        if page is None:
-            self.logger.warning(f"Failed to Connect. {query}")
-            return
+                unwanted = text.find(class_='quote-box2')
+                unwanted.extract()
+                unwanted = text.find(class_='quote-box2')
+                unwanted.extract()
+            except:
+                pass
+            
+            text = "".join(text.p.text.split())
 
-        soup = BeautifulSoup(page.content, "html.parser")
-        
-        # Get Title
-        title = soup.find_all("div", class_="newshead5")
-        title = title[0].text.strip()
-        
-        # Get Ticker List
-        tickers = soup.find_all('a', class_="jsStock")
-        ticker_list = list()
-        
-        # Get Sentiment
-        like = soup.find("div", class_='divRecommend').find('div',class_='value').text
-        pos = soup.find("div", class_="divBullish").find('div',class_='value').text
-        neg = soup.find("div", class_="divBearish").find('div',class_='value').text
+            # Get News Time
+            timestamp = soup.find_all('div', class_="newstime5")
+            timestamp = timestamp[0].text.strip()
+            timestamp = datetime.strptime(timestamp,'%Y/%m/%d %H:%M')
 
-        sentiment = {"like": like, "pos": pos, "neg": neg}
+            source = 'aastocks'
+            source_id = str(hash(title))
+            tickers = ticker_list
+            title= title
+            time = timestamp
+            source_link = query
+            text = text
+            sector_code = None
+            text_hash = str(hash(title+text))
+            sentiment = None
 
-        for ticker in tickers:
-            ticker_list.append(ticker['sym'].strip())
+            doc = AAstocksMongoDoc(
+                        unique_identifier = unique_identifier,
+                        tickers = tickers,
+                        sentiment=sentiment,
+                        sector_code=sector_code,
+                        source_link=source_link,
+                        time=time,
+                        source_id=source_id,
+                        text_hash=text_hash,
+                        title=title,
+                        text=text,
+                        source=source
+                    )
 
-        if len(ticker_list) == 0:
-            ticker_list.append(self.ticker)
-
-        ticker_list = self._getTickerCode(ticker_list)
-
-        # Content
-        text = soup.find(id="spanContent")
-        
-        try:
-            unwanted = text.find(class_='quote-box2')
-            unwanted.extract()
-            unwanted = text.find(class_='quote-box2')
-            unwanted.extract()
-        except:
-            pass
-        
-        text = "".join(text.p.text.split())
-
-        # Get News Time
-        timestamp = soup.find_all('div', class_="newstime5")
-        timestamp = timestamp[0].text.strip()
-        timestamp = datetime.strptime(timestamp,'%Y/%m/%d %H:%M')
-
-        source = 'aastocks'
-        source_id = str(hash(title))
-        tickers = ticker_list
-        title= title
-        time = timestamp
-        source_link = query
-        text = text
-        sector_code = None
-        text_hash = str(hash(title+text))
-        sentiment = None
-
-        doc = AAstocksMongoDoc(
-                    tickers = tickers,
-                    sentiment=sentiment,
-                    sector_code=sector_code,
-                    source_link=source_link,
-                    time=time,
-                    source_id=source_id,
-                    text_hash=text_hash,
-                    title=title,
-                    text=text,
-                    source=source
-                )
-
-        try:
-            self.successful_documents.append(asdict(doc))
-            self.successful_queries.append(query)
-            return True
-        except Exception as e:
-            self.logger.info(f"Payload failed to migrate to mongo. {query}")
-            self.logger.debug(f"Failed Insertion into Mongo: {e}")
-            self.failed_queries.append(query)
+            try:
+                self.successful_documents.append(asdict(doc))
+                self.successful_queries.append(query)
+                return True
+            except Exception as e:
+                self.logger.info(f"Payload failed to migrate to mongo. {query}")
+                self.logger.debug(f"Failed Insertion into Mongo: {e}")
+                self.failed_queries.append(query)
+                return False
+        else:
+            self.skipped_queries.append(query)
             return False

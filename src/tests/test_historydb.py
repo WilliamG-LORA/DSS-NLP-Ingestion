@@ -13,9 +13,12 @@ class TestRedisLeaseMethods(unittest.TestCase):
 
         # Redis Params
         self.REDIS_HOST = os.getenv("REDIS_SERVICE_HOST")
-        self.REDIS_HISTORY_DB = setup_configs['redis_history']
+        self.REDIS_HISTORY_DB = 'redis_lease_unittest'
 
         self._db = RedisLease(name=self.REDIS_HISTORY_DB, host=self.REDIS_HOST)
+
+        # Clean up the database
+        self._db.cleanup()
 
     def test_canAddLease_1(self):
         unique_identifier = '111'

@@ -8,16 +8,20 @@ from res.models.datamodels import MongoDocBase, MongoDocDefaultsBase
 from dataclasses import dataclass, asdict
 from bs4 import BeautifulSoup
 import requests
-from utils.general_utils import get_configs, get_sector_dict, get_sector_loose
+from utils.general_utils import get_configs, get_stock_list
 import logging
 from datetime import datetime
 
+import re
+import random
+from time import sleep
+
+
 @dataclass
 class __RedditMongoDocBase(MongoDocBase):
-    title: str
-    description: str
     text: str
     source: str
+
 
 @dataclass
 class RedditMongoDoc(MongoDocDefaultsBase, __RedditMongoDocBase):
@@ -27,14 +31,21 @@ class RedditMongoDoc(MongoDocDefaultsBase, __RedditMongoDocBase):
 class Reddit(Lurker):
     """
 
-    Reddit Lurker class
-
-    Args:
-        ticker (list): The ticker(s) you want to scrape from.
-        duration (int): Optional, the duration of the documents you want to scrape from.
+    Reddit Lurker class, using pushshift API, the default duration_hr is 2 hrs 
 
     """
-    def __init__(self, ticker, duration = 7):
+
+    def __init__(self, duration_hr: int = 12, offset_hr: int = 0, **kwargs):
+        """[summary]
+
+        Args:
+            config (dict): the config is from config.yamlError
+            sector_dict (dict): ticker symbol to icb code
+            stock_list (list): list of ticker symbols, 556 stocks
+            num_workers (int, optional): number of process running parellelly. Defaults to 2.
+            duration_hr (int, optional): the scraping period in hrs. Defaults to 7.
+            offset_hr (int, optional): the scraping period in hrs. Defaults to 0.
+        """
         # Set logger
         log_fmt = '%(asctime)s %(levelname)s %(message)s'
         logging.basicConfig(level=logging.INFO, format=log_fmt)
@@ -42,37 +53,52 @@ class Reddit(Lurker):
 
         # Base Class Parameters
         configs = get_configs('res/configs/reddit-configs.yaml')
-        super().__init__(configs, logger)
+        super().__init__(configs, logger, **kwargs)
 
-        try:            
+        try:
             # Subclass Params
-            api_configs = configs['api']
-
-            self.DURATION = duration
+            self.DURATION_HR = duration_hr
+            self.OFFSET_HR = offset_hr
             self.NUM_RETRIES = configs['num_retries']
-            self.API_KEY = api_configs['key']
-            self.QUERY_API = api_configs['query_api']
-            self.RENDER_API = api_configs['render_api']
+            self.URL = configs['api']
 
-            self.sector_dict = get_sector_dict(self.universe_collection)
-
-            self.ticker = ticker
+            self.data_sources = configs['data_source']
+            self.stock_list = get_stock_list(self.universe_collection)
 
         except Exception as e:
             self.logger.error(e)
             raise e
 
+    def _get_ticker_from_text(self, text):
+        """get the ticker symbol from reddit post using regex.
+
+        Args:
+            text (str): the submission text
+
+        Returns:
+            [list]: filtered tickers from the text
+        """
+
+        # use regex to find $AAPL, or BB, IT... and check if they are in the stock universe
+        pattern1 = r'\$[A-Za-z]+'
+        pattern2 = r'\b[A-Z][A-Z]+\b'
+        ticker_names = re.findall(pattern1, text)
+        for i in range(len(ticker_names)):
+            ticker_names[i] = ticker_names[i][1:].upper()
+        ticker_names.extend(re.findall(pattern2, text))
+        ticker_name = set(ticker_names) & set(self.stock_list) - {'DD', 'ARE'}
+        return list(ticker_name)
+
     def scraper_iterator(self) -> Generator[str, None, None]:
         """
         Implementation of Abstract Method. Generator Function that returns queries needed by scraper.
         * The format for the query string is at https://developers.reddit.io/docs/news-query-api-request-response-formats.html#request-format
-        
+
         Yields:
             Generator[str, None, None]: queries needed by get_document()
         """
-        for j in range(self.DURATION):
-            queryString = f'symbols:{self.ticker} AND publishedAt:[now-{j}d/d TO *]  AND NOT title:\"4 Form\"'
-            yield queryString
+        for j in range(self.DURATION_HR):
+            yield (f"{j+self.OFFSET_HR}h", f"{j+1+self.OFFSET_HR}h")
 
     def get_scraper_params(self) -> dict:
         """
@@ -110,76 +136,64 @@ class Reddit(Lurker):
 
     def get_document(self, query, **kwargs) -> bool:
 
-        payload = {
-            "type": "filterArticles",
-            "queryString": query,
-            "from": 0,
-            "size": 50
-        }
+        before, after = query
+        base = self.URL
 
-        # seems like we must transform the data into json data bytes, or the request will fail
-        json_data = json.dumps(payload)
-        json_data_bytes = json_data.encode('utf-8')
-
-        # the 'authorization' is the API KEY from the dashboard
-        headers = {
-            'content-type': "application/json",
-            'authorization': self.API_KEY,
-        }
-
-        for _ in range(self.NUM_RETRIES):
-            try:
-                response = requests.post(self.QUERY_API, data=json_data_bytes, headers=headers)
-                if response.status_code == 200:
-                    content = response.json()
-                    break
-            except requests.exceptions.RequestException as e:
-                content = None
-        
-        if content is None:
-            self.logger.warning(f"Failed to Connect. {query}")
-            return
-        elif 'message' in content:
-            self.logger.warning(f"Failed to Connect. {content['message']}")
-            return
-
-        total_articles = content['total']['value']
-
-        while payload['from'] < total_articles:
-            payload['from'] += payload['size']
-
-            articles = content['articles']
-            for article in articles:
-                source_id = article['id']
-                if self.mongo_collection.find_one({'_id': source_id}) != None:
+        # get resource from pushshift API
+        for data_source in self.data_sources:
+            while True:
+                response = requests.get(
+                    base, {"subreddit": data_source, 'size': 100, 'after': after, 'before': before})
+                if response.status_code != 200:
+                    # if request fail, request too frequently, sleep for a while and ask again
+                    sleep(random.randint(1, 4))
                     continue
-                source = article['source']['name']
-                tickers = article['symbols']
-                title= article['title']
-                description = article['description']
-                time = datetime.strptime(article['publishedAt'][0:10], "%Y-%m-%d")
-                source_link = article['url']
-                text = self.__get_text_from_id(source_id)
-                sector_code = get_sector_loose(tickers, self.sector_dict)
-                text_hash = str(hash(title+description+text))
-                sentiment = None
+                data = response.json()['data']
+                break
 
-                doc = RedditMongoDoc(
-                    tickers = tickers,
-                    sentiment=sentiment,
-                    sector_code=sector_code,
-                    source_link=source_link,
-                    time=time,
-                    source_id=source_id,
-                    text_hash=text_hash,
-                    title=title,
-                    description=description,
-                    text=text,
-                    source=source
-                )
+            # processing the body
+            for item in data:
 
-                try:
-                    self.successful_documents.append(asdict(doc))
-                    self.successful_queries.append(query)
-                except Exception as e:
-                    self.failed_queries.append(query)
+                # submissions with this key means the content is probabaly removed by the moderator
+                if 'removed_by_category' in item:
+                    continue
+
+                ticker_timestamp = datetime.fromtimestamp(item['created_utc'])
+                if 'selftext' not in item:
+                    continue
+                elif item['selftext'] in ['unknown', '[removed]']:
+                    continue
+                else:
+                    body = item['selftext']
+
+                text = item['title'] + body
+                tickers = self._get_ticker_from_text(text)
+                    
+                # skip submissions without mentioning any ticker
+                if len(tickers) == 0:
+                    continue
+
+                # Get UniqueIdentifier
+                unique_identifier = self.tryAddArticleToHistory(item['id'])
+
+                if unique_identifier:
+                    doc = RedditMongoDoc(
+                        unique_identifier=unique_identifier,
+                        tickers=tickers,
+                        sentiment=None,
+                        sector_code=None,
+                        time=ticker_timestamp,
+                        text_hash=str(hash(text)),
+                        text=text,
+                        source=f"Reddit/{item['subreddit']}",
+                        source_id=item['id'],
+                        source_link=item['full_link'],
+                    )
+
+                    try:
+                        self.successful_documents.append(asdict(doc))
+                        self.successful_queries.append(item['id'])
+                    except Exception as e:
+                        self.failed_queries.append(item['id'])
+                else:
+                    self.skipped_queries.append(item['id'])

@@ -77,4 +77,5 @@ def main():
         populate_wq(payload, redis_wqs)
 
 if __name__ == "__main__":
-    main()
+    print("done")
+    # main()

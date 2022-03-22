@@ -87,6 +87,7 @@ class EastMoney(Lurker):
         date_before = (today + offset).strftime('%Y-%m-%d')
         start_date = date_before
 
+        # BUG: PhantomJS not found in the worker images
         '''init phantomjs driver'''
         self.driver = webdriver.PhantomJS(executable_path=self.phantomjs_path)
         self.driver.get(self.url)

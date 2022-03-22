@@ -13,7 +13,6 @@ import time
 from functools import wraps
 from typing import Dict, Generator
 from dataclasses import asdict
-from workqueue.rediswq import RedisWQ
 from historydb.redislease import RedisLease
 from utils.database_utils import connect_to_mongodb, bulk_migrate_to_es
 from res.models.datamodels import ESAction, ESDoc
@@ -40,7 +39,7 @@ class Lurker(ABC):
     """
     Abstract lurker class
     """
-    def __init__(self, subclass_config: dict, logger: Logger):
+    def __init__(self, subclass_config: dict, logger: Logger, test_mode: bool=False):
         """
         Initializes a Lurker Abstract Base class. Called only by subclasses.
 
@@ -79,7 +78,11 @@ class Lurker(ABC):
             try:
                 # Redis Params
                 self.REDIS_HOST = os.getenv("REDIS_SERVICE_HOST")
-                self.REDIS_HISTORY_DB = setup_configs['redis_history']
+                if not test_mode:
+                    # Use Production key
+                    self.REDIS_HISTORY_DB = setup_configs['redis_history']
+                else:
+                    self.REDIS_HISTORY_DB = setup_configs['redis_history_test']
             except Exception as e:
                 self.logger.error(e)
                 raise e
@@ -91,6 +94,7 @@ class Lurker(ABC):
             self.successful_documents = []
             self.successful_queries = [] 
             self.failed_queries = []
+            self.skipped_queries = []
 
         except Exception as e:
             self.logger.error(e)
@@ -191,12 +195,24 @@ class Lurker(ABC):
 
             yield asdict(action)        
 
-    def tryAddArticleToHistory(self, unique_identifier: str, lease_secs: 604800):
+    def hasScrapedDocument(self):
+        return (self.getSuccessQueryNum() > 0) or (self.getFailedQueryNum() > 0) or (self.getSkippedQueryNum() > 0)
+
+    def getSuccessQueryNum(self):
+        return len(self.successful_queries)
+
+    def getFailedQueryNum(self):
+        return len(self.failed_queries)
+    
+    def getSkippedQueryNum(self):
+        return len(self.skipped_queries)
+
+    def tryAddArticleToHistory(self, unique_identifier: str, lease_secs: int = 604800):
         """
 
         This function add a article to the redis history database and store for 7 days (604800s)
 
-        Return: True if the article was added successfully, False otherwise.
+        Return: unique_identifier if the article was added successfully, False otherwise.
         """
         histroy_db = RedisLease(name=self.REDIS_HISTORY_DB, host=self.REDIS_HOST)
         return histroy_db.tryAdd(unique_identifier,lease_secs=lease_secs)
@@ -226,8 +242,9 @@ class Lurker(ABC):
 
             success_count = len(self.successful_queries)
             fail_count = len(self.failed_queries)
+            skip_count = len(self.skipped_queries)
 
-            self.logger.info(f'{source} fininshes running! {success_count} records inserted. {fail_count} records failed. ')
+            self.logger.info(f'{source} fininshes running! {success_count} records inserted. {fail_count} records failed. {skip_count} records skipped.')
  
             return True
 

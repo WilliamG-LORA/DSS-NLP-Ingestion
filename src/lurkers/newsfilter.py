@@ -34,7 +34,7 @@ class Newsfilter(Lurker):
         duration (int): Optional, the duration of the documents you want to scrape from.
 
     """
-    def __init__(self, ticker, duration = 7):
+    def __init__(self, ticker, duration = 7, **kwargs):
         # Set logger
         log_fmt = '%(asctime)s %(levelname)s %(message)s'
         logging.basicConfig(level=logging.INFO, format=log_fmt)
@@ -42,7 +42,7 @@ class Newsfilter(Lurker):
 
         # Base Class Parameters
         configs = get_configs('res/configs/newsfilter-configs.yaml')
-        super().__init__(configs, logger)
+        super().__init__(configs, logger, **kwargs)
 
         try:            
             # Subclass Params
@@ -151,35 +151,41 @@ class Newsfilter(Lurker):
             articles = content['articles']
             for article in articles:
                 source_id = article['id']
-                if self.mongo_collection.find_one({'_id': source_id}) != None:
-                    continue
-                source = article['source']['name']
-                tickers = article['symbols']
-                title= article['title']
-                description = article['description']
-                time = datetime.strptime(article['publishedAt'][0:10], "%Y-%m-%d")
-                source_link = article['url']
-                text = self.__get_text_from_id(source_id)
-                sector_code = get_sector_loose(tickers, self.sector_dict)
-                text_hash = str(hash(title+description+text))
-                sentiment = None
+                
+                # Get UniqueIdentifier
+                unique_identifier = self.tryAddArticleToHistory(source_id)
 
-                doc = NewsfilterMongoDoc(
-                    tickers = tickers,
-                    sentiment=sentiment,
-                    sector_code=sector_code,
-                    source_link=source_link,
-                    time=time,
-                    source_id=source_id,
-                    text_hash=text_hash,
-                    title=title,
-                    description=description,
-                    text=text,
-                    source=source
-                )
+                if unique_identifier:
+                    source = article['source']['name']
+                    tickers = article['symbols']
+                    title= article['title']
+                    description = article['description']
+                    time = datetime.strptime(article['publishedAt'][0:10], "%Y-%m-%d")
+                    source_link = article['url']
+                    text = self.__get_text_from_id(source_id)
+                    sector_code = get_sector_loose(tickers, self.sector_dict)
+                    text_hash = str(hash(title+description+text))
+                    sentiment = None
 
-                try:
-                    self.successful_documents.append(asdict(doc))
-                    self.successful_queries.append(query)
-                except Exception as e:
-                    self.failed_queries.append(query)
+                    doc = NewsfilterMongoDoc(
+                        unique_identifier = unique_identifier,
+                        tickers = tickers,
+                        sentiment=sentiment,
+                        sector_code=sector_code,
+                        source_link=source_link,
+                        time=time,
+                        source_id=source_id,
+                        text_hash=text_hash,
+                        title=title,
+                        description=description,
+                        text=text,
+                        source=source
+                    )
+
+                    try:
+                        self.successful_documents.append(asdict(doc))
+                        self.successful_queries.append(query)
+                    except Exception as e:
+                        self.failed_queries.append(query)
+                else:
+                    self.skipped_queries.append(query)
