@@ -72,17 +72,20 @@ class AAstocks(Lurker):
         Yields:
             Generator[str, None, None]: queries needed by get_document()
         """
-        ticker = self.ticker
-        if type(ticker) == int:
-            ticker = str(ticker)
-        ticker = ticker.zfill(5)
-        URL = f"http://aastocks.com/tc/stocks/analysis/stock-aafn/{ticker}/0/all/1"
-        page = requests.get(URL,proxies=urllib.request.getproxies())
-        soup = BeautifulSoup(page.content, "html.parser")
-        news_list = soup.find_all('div', attrs={"ref" : lambda tag: tag and tag.startswith("NOW")})
-        for news in news_list:
-            url = 'http://aastocks.com' + news.find('a')['href']
-            yield url
+        try:
+            ticker = self.ticker
+            if type(ticker) == int:
+                ticker = str(ticker)
+            ticker = ticker.zfill(5)
+            URL = f"http://aastocks.com/tc/stocks/analysis/stock-aafn/{ticker}/0/all/1"
+            page = requests.get(URL,proxies=urllib.request.getproxies())
+            soup = BeautifulSoup(page.content, "html.parser")
+            news_list = soup.find_all('div', attrs={"ref" : lambda tag: tag and tag.startswith("NOW")})
+            for news in news_list:
+                url = 'http://aastocks.com' + news.find('a')['href']
+                yield url
+        except:
+            return []
 
     def get_scraper_params(self) -> dict:
         """
@@ -112,17 +115,6 @@ class AAstocks(Lurker):
             
             temp.append(ticker+suffix)
         return temp
-
-    def getAllNewsLink(self,ticker):
-        if type(ticker) == int:
-            ticker = str(ticker)
-        ticker = ticker.zfill(5)
-        URL = f"http://aastocks.com/tc/stocks/analysis/stock-aafn/{ticker}/0/all/1"
-        page = requests.get(URL,proxies=urllib.request.getproxies())
-        soup = BeautifulSoup(page.content, "html.parser")
-        news_list = soup.find_all('div', attrs={"ref" : lambda tag: tag and tag.startswith("NOW")})
-        news_list = ['http://aastocks.com' + news.find('a')['href'] for news in news_list]
-        return news_list
 
     def get_document(self, query, **kwargs) -> bool:
         """

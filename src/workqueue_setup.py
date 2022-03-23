@@ -68,14 +68,20 @@ def main():
     # Populate RedisWQ
     tickers = universe_collection.distinct('ticker_symbol')
 
-    tickers = itertools.islice(tickers,10)
+    # tickers = itertools.islice(tickers,10)
 
     # For give the work to a specific type of lurker
     for lurker in lurkers_collection:
         # Each lurker will try to scrape the universe
-        payload = [ f"{lurker}:{ticker}" for ticker in tickers]
+        print(f"Init for lurker type {lurker}")
+        if lurker == 'reddit':
+            duration = 24
+            payload = [ f"{lurker}:1-{offset}" for offset in range(duration) ]
+        else:
+            payload = [ f"{lurker}:{ticker}" for ticker in tickers]
+        
         populate_wq(payload, redis_wqs)
 
 if __name__ == "__main__":
-    print("done")
-    # main()
+    # print("Skip")
+    main()

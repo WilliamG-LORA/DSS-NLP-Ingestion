@@ -46,12 +46,23 @@ class Worker():
             self.logger.error(e)
             raise e
 
-    def lurkerJob(self,lurker_type, ticker):
+    def lurkerJob(self,lurker_type, payload):
         # Select Lurker job
         if lurker_type == "newsfilter":
-            lurker = Newsfilter(ticker)
+            print(f"Worker: do {lurker_type}, payload: {payload}")
+            lurker = Newsfilter(payload)
         elif lurker_type == "reddit":
-            lurker = Reddit(ticker)
+            duration_hr, offset_hr = payload.split('-')
+            duration_hr = int(duration_hr)
+            offset_hr = int(offset_hr)
+            print(f"Worker: do {lurker_type}, payload: {payload}")
+            lurker = Reddit(duration_hr=duration_hr,offset_hr=offset_hr)
+        elif lurker_type == "aastocks":
+            print(f"Worker: do {lurker_type}, payload: {payload}")
+            lurker = AAstocks(payload)
+        elif lurker_type == "etnet":
+            print(f"Worker: do {lurker_type}, payload: {payload}")
+            lurker = Etnet(payload)
         else:
             self.logger.error(f"Invalid Lurker Type: {lurker_type}")
 
@@ -68,7 +79,7 @@ class Worker():
             print("Worker with sessionID: " +  wq.sessionID())
             print("Initial queue state: empty=" + str(wq.empty()))
             while not wq.empty():
-                item = wq.lease(lease_secs=2, block=True, timeout=2) 
+                item = wq.lease(lease_secs=60, block=True, timeout=2) 
                 if item is not None:
                     try:
                         # item is not string
@@ -79,11 +90,11 @@ class Worker():
                         self.logger.info(f"Item is string: {item}")
                         itemstr = item
 
-                    lurker_type, ticker = itemstr.split(":")
+                    lurker_type, payload = itemstr.split(":")
 
                     # Pass params to lurker
-                    print(f"[{lurker_type}] on {ticker}")
-                    self.lurkerJob(lurker_type, ticker)
+                    print(f"[{lurker_type}] get payload:{payload}")
+                    self.lurkerJob(lurker_type, payload)
 
                     wq.complete(item)
                 else:
@@ -97,6 +108,5 @@ class Worker():
 if __name__ == '__main__':
     config = get_configs('res/configs/setup-configs.yaml')
 
-    print(f"Hello World! {time.time()}")
     worker = Worker(subclass_config=config,logger=logger)
     worker.doWork()

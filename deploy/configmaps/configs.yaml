@@ -55,3 +55,6 @@ data:
     redis_history_test: global_history_test
     lurkers_collection: 
       - newsfilter
+      - reddit
+      - aastocks
+      - etnet

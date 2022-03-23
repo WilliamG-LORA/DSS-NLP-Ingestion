@@ -76,31 +76,35 @@ class Etnet(Lurker):
         Yields:
             list: queries needed by get_document()
         """
-        ticker = self.ticker
 
-        if type(ticker) == int:
-            ticker = str(ticker)
-        ticker = ticker.zfill(5)
-        URL = f"http://www.etnet.com.hk/www/tc/stocks/realtime/quote_news_list.php?page=1&section=related&code={ticker}"
-        page = requests.get(URL,proxies=urllib.request.getproxies())
-        soup = BeautifulSoup(page.content, "html.parser")
-        
-        articles = soup.find(class_="DivArticlePagination")
+        try:
+            ticker = self.ticker
 
-        article_links = list()
-        
-        # Find Pagnation
-        for idx, article in enumerate(articles.find_all('a')):
-            if idx < self.max_page:
-                domain = "http://www.etnet.com.hk"
-                link = article['href']
-                url = domain + link
-                results = self.getNewsLink(url)
-                article_links.extend(results)
-            else:
-                break
+            if type(ticker) == int:
+                ticker = str(ticker)
+            ticker = ticker.zfill(5)
+            URL = f"http://www.etnet.com.hk/www/tc/stocks/realtime/quote_news_list.php?page=1&section=related&code={ticker}"
+            page = requests.get(URL,proxies=urllib.request.getproxies())
+            soup = BeautifulSoup(page.content, "html.parser")
             
-        return article_links
+            articles = soup.find(class_="DivArticlePagination")
+
+            article_links = list()
+            
+            # Find Pagnation
+            for idx, article in enumerate(articles.find_all('a')):
+                if idx < self.max_page:
+                    domain = "http://www.etnet.com.hk"
+                    link = article['href']
+                    url = domain + link
+                    results = self.getNewsLink(url)
+                    article_links.extend(results)
+                else:
+                    break
+                
+            return article_links
+        except:
+            return []
 
     def get_scraper_params(self) -> dict:
         """
@@ -215,86 +219,91 @@ class Etnet(Lurker):
         unique_identifier = self.tryAddArticleToHistory(article_id)
 
         if unique_identifier:
-
-            for _ in range(self.NUM_RETRIES):
-                try:
-                    response = requests.get(query,proxies=urllib.request.getproxies())
-                    if response.status_code == 200:
-                        page = response
-                        break
-                except requests.exceptions.RequestException as e:
-                    content = None
-            
-            if page is None:
-                self.logger.warning(f"Failed to Connect. {query}")
-                return
-
-            soup = BeautifulSoup(page.content, "html.parser")
-            
-            # Get Title
-            title = soup.find("p", class_="ArticleHdr")
-            title = str(title.text).strip()
-            title = self.strQ2B(title)
-
-            # Content
-            text = soup.find(id="NewsContent")
-            text = "".join(text.p.text.split())
-
-            # 全形 -> 半形
-            text = self.strQ2B(text) 
-            
-            # Remove Consecutive Punctuation
-            text = self.removeConsecutive(text)
-
-            # Get Tickers
-            ticker_list = re.findall(r"\((.*?)\)",text)
-            for idx,ticker in enumerate(ticker_list):
-                if not ticker.isnumeric():
-                    ticker_list = list(filter((ticker).__ne__, ticker_list))
-
-            if len(ticker_list) == 0:
-                ticker_list.append(self.ticker)
-
-            ticker_list = self.getTickerCode(ticker_list)
-
-            # Get News Time
-            timestamp = soup.find_all('p', class_="date")
-            timestamp = timestamp[0].text.strip()
-            timestamp = datetime.strptime(timestamp,'%d/%m/%Y %H:%M')
-
-            source = 'etnet'
-            source_id = str(hash(title))
-            tickers = ticker_list
-            title= title
-            time = timestamp
-            source_link = query
-            text = text
-            sector_code = None
-            text_hash = str(hash(title+text))
-            sentiment = None
-
-            doc = EtnetMongoDoc(
-                        unique_identifier=unique_identifier,
-                        tickers = tickers,
-                        sentiment=sentiment,
-                        sector_code=sector_code,
-                        source_link=source_link,
-                        time=time,
-                        source_id=source_id,
-                        text_hash=text_hash,
-                        title=title,
-                        text=text,
-                        source=source
-                    )
-
             try:
-                self.successful_documents.append(asdict(doc))
-                self.successful_queries.append(query)
-                return True
-            except Exception as e:
-                self.logger.info(f"Payload failed to migrate to mongo. {query}")
-                self.logger.debug(f"Failed Insertion into Mongo: {e}")
-                self.failed_queries.append(query)
+                for _ in range(self.NUM_RETRIES):
+                    try:
+                        response = requests.get(query,proxies=urllib.request.getproxies())
+                        if response.status_code == 200:
+                            page = response
+                            break
+                    except requests.exceptions.RequestException as e:
+                        content = None
+                
+                if page is None:
+                    self.logger.warning(f"Failed to Connect. {query}")
+                    return
+
+                soup = BeautifulSoup(page.content, "html.parser")
+                
+                # Get Title
+                title = soup.find("p", class_="ArticleHdr")
+                title = str(title.text).strip()
+                title = self.strQ2B(title)
+
+                # Content
+                text = soup.find(id="NewsContent")
+                text = "".join(text.p.text.split())
+
+                # 全形 -> 半形
+                text = self.strQ2B(text) 
+                
+                # Remove Consecutive Punctuation
+                text = self.removeConsecutive(text)
+
+                # Get Tickers
+                ticker_list = re.findall(r"\((.*?)\)",text)
+                for idx,ticker in enumerate(ticker_list):
+                    if not ticker.isnumeric():
+                        ticker_list = list(filter((ticker).__ne__, ticker_list))
+
+                if len(ticker_list) == 0:
+                    ticker_list.append(self.ticker)
+
+                ticker_list = self.getTickerCode(ticker_list)
+
+                # Get News Time
+                timestamp = soup.find_all('p', class_="date")
+                timestamp = timestamp[0].text.strip()
+                timestamp = datetime.strptime(timestamp,'%d/%m/%Y %H:%M')
+
+                source = 'etnet'
+                source_id = str(hash(title))
+                tickers = ticker_list
+                title= title
+                time = timestamp
+                source_link = query
+                text = text
+                sector_code = None
+                text_hash = str(hash(title+text))
+                sentiment = None
+
+                doc = EtnetMongoDoc(
+                            unique_identifier=unique_identifier,
+                            tickers = tickers,
+                            sentiment=sentiment,
+                            sector_code=sector_code,
+                            source_link=source_link,
+                            time=time,
+                            source_id=source_id,
+                            text_hash=text_hash,
+                            title=title,
+                            text=text,
+                            source=source
+                        )
+
+                try:
+                    self.successful_documents.append(asdict(doc))
+                    self.successful_queries.append(query)
+                    return True
+                except Exception as e:
+                    self.logger.info(f"Payload failed to migrate to mongo. {query}")
+                    self.logger.debug(f"Failed Insertion into Mongo: {e}")
+                    self.failed_queries.append(query)
+                    return False
+                    
+            except:
+                # Some error occurred, skip this record
+                self.skipped_queries.append(query)
                 return False
         else:
             self.skipped_queries.append(query)
