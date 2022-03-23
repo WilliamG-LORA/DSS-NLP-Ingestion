@@ -107,20 +107,19 @@ def get_configs(config_path: str):
     return config
 
 # ! WIP
-def get_stock_list():
+def get_stock_list(mongodb_cursor):
     """
     get 556 stocks' symbols (AMZN)
     """
-    return list(get_sector_dict().keys())
+    return [item['ticker_symbol'] for item in mongodb_cursor.find({},{"_id": 0,"ticker_symbol": 1})]
 
 # ! WIP
-def get_sector_dict():
+def get_sector_dict(sector_dict): 
     """
-    get each symbol's corresponding sector (AMZN -> 10101010)
+    get each symbol's corresponding sector using ICB code (AMZN -> 10101010)
     """
-    with open('resource/stocks/sector_dict.json') as json_file:
-        sector_dict = json.load(json_file)
-    return sector_dict
+    # Return the pymongo cursor object
+    return sector_dict.find()
 
 
 # ! WIP

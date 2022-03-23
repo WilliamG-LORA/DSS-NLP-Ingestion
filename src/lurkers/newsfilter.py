@@ -26,22 +26,28 @@ class NewsfilterMongoDoc(MongoDocDefaultsBase, __NewsfilterMongoDocBase):
 
 class Newsfilter(Lurker):
     """
-    TODO: ...
+
+    Newsfilter Lurker class
+
+    Args:
+        ticker (list): The ticker(s) you want to scrape from.
+        duration (int): Optional, the duration of the documents you want to scrape from.
+
     """
-    def __init__(self, duration = 7):
+    def __init__(self, ticker, duration = 7, **kwargs):
         # Set logger
         log_fmt = '%(asctime)s %(levelname)s %(message)s'
         logging.basicConfig(level=logging.INFO, format=log_fmt)
         logger = logging.getLogger(__name__)
 
-        try:
-            # Base Class Parameters
-            configs = get_configs('res/configs/newsfilter-configs.yaml')
-            super().__init__(configs, logger)
-            
+        # Base Class Parameters
+        configs = get_configs('res/configs/newsfilter-configs.yaml')
+        super().__init__(configs, logger, **kwargs)
+
+        try:            
             # Subclass Params
             api_configs = configs['api']
-            
+
             self.DURATION = duration
             self.NUM_RETRIES = configs['num_retries']
             self.API_KEY = api_configs['key']
@@ -50,8 +56,7 @@ class Newsfilter(Lurker):
 
             self.sector_dict = get_sector_dict(self.universe_collection)
 
-            self.successful_queries = [] #TODO
-            self.failed_queries = []    #TODO
+            self.ticker = ticker
 
         except Exception as e:
             self.logger.error(e)
@@ -65,15 +70,9 @@ class Newsfilter(Lurker):
         Yields:
             Generator[str, None, None]: queries needed by get_document()
         """
-        tickers = self.__get_next_ticker()
-        for ticker in tickers:
-            self.logger.debug(f"Pulled {ticker} from {self.redis_list_name} work-queue")
-            for j in range(self.DURATION):
-                
-                queryString = f'symbols:{ticker} AND publishedAt:[now-{j}d/d TO *]  AND NOT title:\"4 Form\"'
-                success = (yield queryString)
-                tickers.send(success)
-
+        for j in range(self.DURATION):
+            queryString = f'symbols:{self.ticker} AND publishedAt:[now-{j}d/d TO *]  AND NOT title:\"4 Form\"'
+            yield queryString
 
     def get_scraper_params(self) -> dict:
         """
@@ -109,7 +108,7 @@ class Newsfilter(Lurker):
             content = BeautifulSoup((response.text), 'lxml').get_text()
         return content
 
-    def __get_document(self, query, **kwargs) -> bool:
+    def get_document(self, query, **kwargs) -> bool:
 
         payload = {
             "type": "filterArticles",
@@ -138,62 +137,55 @@ class Newsfilter(Lurker):
                 content = None
         
         if content is None:
-            self.logger.warning(f"Failed to Connect. {query=}")
+            self.logger.warning(f"Failed to Connect. {query}")
             return
-        
+        elif 'message' in content:
+            self.logger.warning(f"Failed to Connect. {content['message']}")
+            return
+
         total_articles = content['total']['value']
-        successful_payloads = 0
-        failed_payloads = 0
 
         while payload['from'] < total_articles:
             payload['from'] += payload['size']
 
             articles = content['articles']
-            record_list = []
             for article in articles:
                 source_id = article['id']
-                if self.mongo_collection.find_one({'_id': source_id}) != None:
-                    continue
-                source = article['source']['name']
-                tickers = article['symbols']
-                title= article['title']
-                description = article['description']
-                time = datetime.strptime(article['publishedAt'][0:10], "%Y-%m-%d")
-                source_link = article['url']
-                text = self.__get_text_from_id(source_id)
-                sector_code = get_sector_loose(tickers, self.sector_dict)
-                text_hash = str(hash(title+description+text))
-                sentiment = None
-
-                doc = NewsfilterMongoDoc(
-                    tickers = tickers,
-                    sentiment=sentiment,
-                    sector_code=sector_code,
-                    source_link=source_link,
-                    time=time,
-                    source_id=source_id,
-                    text_hash=text_hash,
-                    title=title,
-                    description=description,
-                    text=text,
-                    source=source
-                )
-
-                record_list.append(asdict(doc))
-
-            try:
-                self.mongo_collection.insert_many(record_list, ordered=False)
                 
-            except Exception as e:
-                failed_payloads += 1
-                self.logger.info(f"Payload failed to migrate to mongo. {failed_payloads=}; {query=}")
-                self.logger.debug(f"Failed Insertion into Mongo: {e}")
-            else:
-                successful_payloads+=1
+                # Get UniqueIdentifier
+                unique_identifier = self.tryAddArticleToHistory(source_id)
 
-        if total_articles and not successful_payloads:
-            self.successful_queries.append(query)
-            return True
-        else:
-            self.failed_queries.append(query)
-            return False
+                if unique_identifier:
+                    source = article['source']['name']
+                    tickers = article['symbols']
+                    title= article['title']
+                    description = article['description']
+                    time = datetime.strptime(article['publishedAt'][0:10], "%Y-%m-%d")
+                    source_link = article['url']
+                    text = self.__get_text_from_id(source_id)
+                    sector_code = get_sector_loose(tickers, self.sector_dict)
+                    text_hash = str(hash(title+description+text))
+                    sentiment = None
+
+                    doc = NewsfilterMongoDoc(
+                        unique_identifier = unique_identifier,
+                        tickers = tickers,
+                        sentiment=sentiment,
+                        sector_code=sector_code,
+                        source_link=source_link,
+                        time=time,
+                        source_id=source_id,
+                        text_hash=text_hash,
+                        title=title,
+                        description=description,
+                        text=text,
+                        source=source
+                    )
+
+                    try:
+                        self.successful_documents.append(asdict(doc))
+                        self.successful_queries.append(query)
+                    except Exception as e:
+                        self.failed_queries.append(query)
+                else:
+                    self.skipped_queries.append(query)

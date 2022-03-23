@@ -7,12 +7,12 @@ class BaseDoc:
     """
     Base Dataclass to represent documents stored in the ElasticSearch/Mongo Database. 
     """
+    unique_identifier: str
     tickers: List[str]
     sentiment: Union[float,None]
     sector_code: int
     source_link: Union[str, None]
     time: datetime
-
 
 
 @dataclass

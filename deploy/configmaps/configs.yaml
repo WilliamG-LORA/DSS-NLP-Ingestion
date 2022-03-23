@@ -1,0 +1,54 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configs
+data:
+  base-configs: |
+    universe_collection: base.universe
+  newsfilter-configs: |
+    class: 2
+    mongo_collection: lurkers.class2.en.newsfilter
+    es_index: nlp-scrapedata-class2-newsfilter
+    api:
+      key: aaca8492610747a3a249d99b6995190b1b1b48ef9fcb4dcb9dedc4d24d3472fe
+      query_api: https://api.newsfilter.io/public/actions
+      render_api: https://api.newsfilter.io/articles/{article_id}.html
+    num_retries: 10
+  reddit-configs: |
+    class: 3
+    mongo_collection: lurkers.class3.en.reddit
+    es_index: nlp-scrapedata-class3-reddit
+    api: https://api.pushshift.io/reddit/search/submission/
+    data_source:
+      - wallstreetbets
+      - investing
+      - stocks
+      - Stock_Picks
+      - StockMarket
+    num_retries: 10
+  aastocks-configs: |
+    class: 2
+    mongo_collection: lurkers.class2.cht.aastocks
+    es_index: nlp-scrapedata-class2-aastocks
+    num_retries: 10
+  etnet-configs: |
+    class: 2
+    mongo_collection: lurkers.class2.cht.etnet
+    es_index: nlp-scrapedata-class2-etnet
+    num_retries: 10
+  eastmoney-configs: |
+    class: 4
+    mongo_collection: lurkers.class4.chs.eastmoney
+    es_index: nlp-scrapedata-class4-eastmoney
+    redis_list_name: class4_zh_eastmoney
+    api:
+      SecretId: AKIDlMhlY5LK2TdXBYfV4MO9droVv4vWrugB
+      SecretKey: GFxOYS7VdT2KM8cpqa3E8l7C0Zsue9OL
+  setup-configs: |
+    universe_collection: base.universe
+    redis_wqs: global_queues
+    redis_history: global_history
+    redis_history_test: global_history_test
+    lurkers_collection: 
+      - newsfilter

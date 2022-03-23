@@ -9,11 +9,25 @@ spec:
   containers:
     - name: master
       image: redis
+      resources:
+        limits:
+          memory: "128Mi"
+          cpu: "500m"
+      command:
+        - redis-server
+        - "--save 60 1 --loglevel warning"
       env:
-        - name: MASTER
+        - name: MASTER # ? What is this?
           value: "true"
       ports:
         - containerPort: 6379
+      volumeMounts:
+        - mountPath: /data
+          name: redis-persistent
+  volumes:
+    - name: redis-persistent
+      hostPath:
+        path: redis-peristent
 
 ---
 apiVersion: v1
@@ -26,3 +40,4 @@ spec:
       targetPort: 6379
   selector:
     app: redis
+

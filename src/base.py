@@ -1,5 +1,7 @@
 # Contains the abstract class from which lurkers will inherit from
-
+"""
+    A Lurker will accept a ticker, and return the document regarding the given ticker
+"""
 __author__ = "Srijan Saxena"
 __email__ = "srijan@loratechai.com"
 
@@ -11,25 +13,33 @@ import time
 from functools import wraps
 from typing import Dict, Generator
 from dataclasses import asdict
-from workqueue.rediswq import RedisWQ
+from historydb.redislease import RedisLease
 from utils.database_utils import connect_to_mongodb, bulk_migrate_to_es
 from res.models.datamodels import ESAction, ESDoc
 from abc import ABC, abstractmethod
 from datetime import datetime
 from utils.general_utils import get_configs
 
+# Lurkers
+from lurkers import *
+
+# String to Class
+import sys
+
+# TODO: 
+
 # Import grpc dependencies
-import grpc
-from grapevine_pb2_grpc import GPTKStub, StockHotnessCalculatorStub
-from grapevine_pb2 import GPTKIngressRequest, SHCIngressRequest
-from load_grpc_options import get_options as get_grpc_options
-from concurrent import futures
+# import grpc
+# from grapevine_pb2_grpc import GPTKStub, StockHotnessCalculatorStub
+# from grapevine_pb2 import GPTKIngressRequest, SHCIngressRequest
+# from load_grpc_options import get_options as get_grpc_options
+# from concurrent import futures
 
 class Lurker(ABC):
     """
     Abstract lurker class
     """
-    def __init__(self, subclass_config: dict, logger: Logger):
+    def __init__(self, subclass_config: dict, logger: Logger, test_mode: bool=False):
         """
         Initializes a Lurker Abstract Base class. Called only by subclasses.
 
@@ -38,68 +48,68 @@ class Lurker(ABC):
         """
         self.logger = logger
 
-        self.logger.info("Connecting to microservices..")
+        # self.logger.info("Connecting to microservices..")
         try:
             # Get Configs
             base_config = get_configs('res/configs/base-configs.yaml')
-            options = get_grpc_options()
+            # options = get_grpc_options()
 
-            # GPT-K Connection
-            gptk_host = os.getenv("GPTK_HOST")
-            gptk_channel = grpc.insecure_channel(f"{gptk_host}:50051", options=options)
-            self.gptk_client = GPTKStub(gptk_channel)
+            # # GPT-K Connection
+            # gptk_host = os.getenv("GPTK_HOST")
+            # gptk_channel = grpc.insecure_channel(f"{gptk_host}:50051", options=options)
+            # self.gptk_client = GPTKStub(gptk_channel)
 
-            # Stock Hotness Calculator Connection
-            shc_host = os.getenv("SHC_HOST")
-            shc_channel = grpc.insecure_channel(f"{shc_host}:50051", options=options)
-            self.shc_client = StockHotnessCalculatorStub(shc_channel)
+            # # Stock Hotness Calculator Connection
+            # shc_host = os.getenv("SHC_HOST")
+            # shc_channel = grpc.insecure_channel(f"{shc_host}:50051", options=options)
+            # self.shc_client = StockHotnessCalculatorStub(shc_channel)
 
             # Connect to MongoDB
             self.universe_collection = connect_to_mongodb(base_config['universe_collection'])
             self.mongo_collection =  connect_to_mongodb(subclass_config['mongo_collection'])
 
+            # Setup Config
+            setup_configs = get_configs('res/configs/setup-configs.yaml')
+
             # ElasticSearch Param
-            self.ES_INDEX = subclass_config['es_index']
+            # self.ES_INDEX = subclass_config['es_index']
 
             # Redis Params
-            self.REDIS_HOST = os.getenv("REDIS_SERVICE_HOST")
-            self.REDIS_LIST_NAME = subclass_config['redis_list_name']
+            try:
+                # Redis Params
+                self.REDIS_HOST = os.getenv("REDIS_SERVICE_HOST")
+                if not test_mode:
+                    # Use Production key
+                    self.REDIS_HISTORY_DB = setup_configs['redis_history']
+                else:
+                    self.REDIS_HISTORY_DB = setup_configs['redis_history_test']
+            except Exception as e:
+                self.logger.error(e)
+                raise e
 
             # Subclass Params
             self.SOURCE_CLASS = subclass_config['class']
+
+            # Keep track of the job
+            self.successful_documents = []
+            self.successful_queries = [] 
+            self.failed_queries = []
+            self.skipped_queries = []
 
         except Exception as e:
             self.logger.error(e)
             raise e
 
-    def __get_next_ticker(self) -> Generator[str, bool, None]:
-        """
-        Generator that fetches the next task from Redis Work Queue.
-
-        Yields:
-            Generator[str, None, None]: Items in the queue worked on by this pod.
-        """
-        wq = RedisWQ(name=self.REDIS_LIST_NAME, host=self.REDIS_HOST)
-
-        self.logger.info(f"Worker with sessionID: {wq.sessionID()}")
-        self.logger.info(f"Initial queue state: empty= {wq.empty()}")
-
-        while not wq.empty():
-            item = wq.lease(lease_secs=10, block=True, timeout=2) 
-            if item is not None:
-                itemstr = item.decode("utf-8")
-                self.logger.info("Working on {itemstr}")
-                success = yield itemstr
-                if success:
-                    wq.complete(item)
-            else:
-                self.logger.info("Waiting for work")
-        self.logger.info("Queue empty, exiting")
 
     @abstractmethod
-    def scraper_iterator(self) -> Generator[str, bool, None]:
+    def scraper_iterator(self,ticker) -> Generator[str, bool, None]:
         """
         Abstract Method. Generator Function that returns queries needed by scraper.
+
+        NOTE: This method is to cater scraper that requires more than one query for each tickers (i.e. Pagnations)
+
+        Args:
+            ticker (str): The ticker
 
         Yields:
             Generator[str, None, None]: queries needed by get_document()
@@ -117,7 +127,7 @@ class Lurker(ABC):
         return {}
 
     @abstractmethod
-    def __get_document(self, query, **kwargs) -> bool:
+    def get_document(self, query, **kwargs) -> bool:
         """
         Abstract Method. Scrapes and returns document scraped using query.
 
@@ -185,76 +195,66 @@ class Lurker(ABC):
 
             yield asdict(action)        
 
-    # ! DEPRECATED.
-    @staticmethod
-    def scraper(get_document_unbounded):
+    def hasScrapedDocument(self):
+        return (self.getSuccessQueryNum() > 0) or (self.getFailedQueryNum() > 0) or (self.getSkippedQueryNum() > 0)
+
+    def getSuccessQueryNum(self):
+        return len(self.successful_queries)
+
+    def getFailedQueryNum(self):
+        return len(self.failed_queries)
+    
+    def getSkippedQueryNum(self):
+        return len(self.skipped_queries)
+
+    def tryAddArticleToHistory(self, unique_identifier: str, lease_secs: int = 604800):
         """
-        Decorator method for subclass document scraper.
 
-        Args:
-            get_document_unbounded (function): subclass document scraper method unbounded to its instance.
+        This function add a article to the redis history database and store for 7 days (604800s)
 
-        Raises:
-            e: Exception
-
-        Returns:
-            function: decorated function.
+        Return: unique_identifier if the article was added successfully, False otherwise.
         """
-        @wraps(get_document_unbounded)
-        def scraper_wrapper(self):
-            try:
-                source = self.__class__.__name__
+        histroy_db = RedisLease(name=self.REDIS_HISTORY_DB, host=self.REDIS_HOST)
+        return histroy_db.tryAdd(unique_identifier,lease_secs=lease_secs)
 
-                start_doc_count = self.mongo_collection.count_documents({})
-                self.logger.info(f'{source} running...')
+    def dryrun(self):
+        """
 
-                # Get iterator for subclass scraper
-                scraper_iter = self.scraper_iterator()
+        Scrape the news but not push the result to the mongo database
 
-                # Get **kwargs for subclass scraper
-                scraper_params = self.get_scraper_params()
+        """
+        try:
+            source = self.__class__.__name__
 
-                # Bound get_document to instance
-                get_document = get_document_unbounded.__get__(type(self), self)
+            self.logger.info(f'{source} running...')
 
-                # Get documents
-                for query in scraper_iter:
-                    get_document(query, **scraper_params)
+            # Get iterator for subclass scraper
+            scraper_iter = self.scraper_iterator()
 
-                end_doc_count = self.mongo_collection.count_documents({})
-                self.logger.info(f'{source} fininshes running successfully! {end_doc_count-start_doc_count} records inserted.')
+            # Get **kwargs for subclass scraper
+            scraper_params = self.get_scraper_params()
 
-                # Migrate to ES
-                self.logger.info("Migrating {num_docs} docs to ES...")
+            # Get 1 document only
+            for query in scraper_iter:
+                success = self.get_document(query, **scraper_params)
+                if len(self.successful_documents) > 0:
+                    break
 
-                num_docs_to_migrate = self.mongo_collection.count_documents({"just_insert": True})
-                successes, failures, errors = bulk_migrate_to_es(
-                    mongo_collection= self.mongo_collection,
-                    es_index= self.ES_INDEX,
-                    actions= self.generate_es_actions(),
-                )
+            success_count = len(self.successful_queries)
+            fail_count = len(self.failed_queries)
+            skip_count = len(self.skipped_queries)
 
-                self.logger.info(
-                    f'''Successfully migrated {successes} ({successes/num_docs_to_migrate}) docs to ES. 
-                    {failures} ({failures/num_docs_to_migrate}) docs failed.
-                    '''
-                )
-                self.logger.debug(
-                    f'''Failed documents:
-                    {json.dumps(errors)}
-                    '''
-                )
+            self.logger.info(f'{source} fininshes running! {success_count} records inserted. {fail_count} records failed. {skip_count} records skipped.')
+ 
+            return True
 
-            except Exception as e:
-                raise e
-
-        return scraper_wrapper
+        except Exception as e:
+            raise e
 
     def scrape(self):
         try:
             source = self.__class__.__name__
 
-            start_doc_count = self.mongo_collection.count_documents({})
             self.logger.info(f'{source} running...')
 
             # Get iterator for subclass scraper
@@ -266,49 +266,62 @@ class Lurker(ABC):
             # Get documents
             for query in scraper_iter:
                 success = self.get_document(query, **scraper_params)
-                scraper_iter.send(success)
+                
+            # Insert Data to mongodb database
+            try:
+                self.mongo_collection.insert_many(self.successful_documents, ordered=False)
+            except Exception as e:
+                self.logger.info(f"Payload failed to migrate to mongo.")
+                self.logger.debug(f"Failed Insertion into Mongo: {e}")
 
-            end_doc_count = self.mongo_collection.count_documents({})
-            self.logger.info(f'{source} fininshes running successfully! {end_doc_count-start_doc_count} records inserted.')
+            success_count = len(self.successful_queries)
+            fail_count = len(self.failed_queries)
+
+            self.logger.info(f'{source} fininshes running! {success_count} records inserted. {fail_count} records failed. ')
 
             # Migrate to ES
-            self.logger.info("Migrating {num_docs} docs to ES...")
+            # self.logger.info("Migrating {num_docs} docs to ES...")
 
-            num_docs_to_migrate = self.mongo_collection.count_documents({"just_insert": True})
-            successes, failures, errors = bulk_migrate_to_es(
-                mongo_collection= self.mongo_collection,
-                es_index= self.ES_INDEX,
-                actions= self.generate_es_actions(),
-            )
+            # num_docs_to_migrate = self.mongo_collection.count_documents({"just_insert": True})
+            # successes, failures, errors = bulk_migrate_to_es(
+            #     mongo_collection= self.mongo_collection,
+            #     es_index= self.ES_INDEX,
+            #     actions= self.generate_es_actions(),
+            # )
 
-            self.logger.info(
-                f'''Successfully migrated {successes} ({successes/num_docs_to_migrate}) docs to ES. 
-                {failures} ({failures/num_docs_to_migrate}) docs failed.
-                '''
-            )
-            self.logger.debug(
-                f'''Failed documents:
-                {json.dumps(errors)}
-                '''
-            )
+            # self.logger.info(
+            #     f'''Successfully migrated {successes} ({successes/num_docs_to_migrate}) docs to ES. 
+            #     {failures} ({failures/num_docs_to_migrate}) docs failed.
+            #     '''
+            # )
+            # self.logger.debug(
+            #     f'''Failed documents:
+            #     {json.dumps(errors)}
+            #     '''
+            # )
 
         except Exception as e:
             raise e
 
-    def send_data_to_GPTK(self, data, source):
-        """
-        Sends scraped data to GPT-K
-        """
-        #TODO
-        request = GPTKIngressRequest(data=data, source=source, timestamp=str(time.time()), clean=True)
-        response = self.gptk_client.sendData(request)
-        return(response.success)
 
-    def send_data_to_SHC(self, data):
-        """
-        Sends scraped data to Stock Hotness Calculator
-        """
-        #TODO
-        request = SHCIngressRequest(data=data, timestamp=str(time.time()))
-        response = self.shc_client.sendData(request)
-        return(response.success)
+"""
+WIP Code
+"""
+
+    # def send_data_to_GPTK(self, data, source):
+    #     """
+    #     Sends scraped data to GPT-K
+    #     """
+    #     # TODO: Send data to GPT-K
+    #     request = GPTKIngressRequest(data=data, source=source, timestamp=str(time.time()), clean=True)
+    #     response = self.gptk_client.sendData(request)
+    #     return(response.success)
+
+    # def send_data_to_SHC(self, data):
+    #     """
+    #     Sends scraped data to Stock Hotness Calculator
+    #     """
+    #     # TODO: Send data to Stock Hotness Calculator
+    #     request = SHCIngressRequest(data=data, timestamp=str(time.time()))
+    #     response = self.shc_client.sendData(request)
+    #     return(response.success)
