@@ -11,26 +11,15 @@ from utils.general_utils import get_configs, get_sector_dict, get_sector_loose
 import logging
 from datetime import datetime, timedelta
 
-import os
-import time
-import traceback
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from utils.baidu_api import BaiduNLU
+from utils.tencent_api import TecentNLU
 
 @dataclass
 class __EastMoneyMongoDocBase(MongoDocBase):
-    ticker_id: str
-    ticker_name: str
-    ticker_class: str
-    ticker_grade: list
-    text_time: str
-    text_title: str
-    text_content: str
-    text_keyword: dict
-    text_topic: dict
+    link: str
+    info: dict
+    type: str
+    content: str
+    keywords: list
 
 @dataclass
 class EastMoneyMongoDoc(MongoDocDefaultsBase, __EastMoneyMongoDocBase):
@@ -41,9 +30,10 @@ class EastMoney(Lurker):
     """
         scraper for eastmoney stock researchs, "https://data.eastmoney.com/report/stock.jshtml"
 
-        Input: Number of days before
+        duration_hr (int, optional): the scraping period in hrs. Defaults to 12.
+        offset_hr (int, optional): the scraping period in hrs. Defaults to 0.
     """
-    def __init__(self, duration = 7):
+    def __init__(self, duration_hr: int = 12, offset_hr: int = 0, **kwargs):
 
         log_fmt = '%(asctime)s %(levelname)s %(message)s'
         logging.basicConfig(level=logging.INFO, format=log_fmt)
@@ -55,12 +45,11 @@ class EastMoney(Lurker):
 
         try:
             '''Subclass Params'''
-            self.DURATION = duration
+            self.DURATION_HR = duration_hr
+            self.OFFSET_HR = offset_hr
 
-            self.phantomjs_path = configs['phantomjs_path']
-            self.url = configs['eastmoney_url']
             api_configs = configs['api']
-            # self.nlu_tool = BaiduNLU(api_configs)
+            self.nlu_tool = TecentNLU(api_configs)
 
             self.sector_dict = get_sector_dict(self.universe_collection)
 
@@ -71,68 +60,40 @@ class EastMoney(Lurker):
             self.logger.error(e)
             raise e
 
-    def __get_page_by_num(self, num):
-        """simulate mouse to click the next page"""
-        element_page = WebDriverWait(self.driver, 30).until(EC.presence_of_element_located((By.ID, "stock_table_pager")))
-        tr_options = element_page.find_element_by_class_name("ipt")
-        tr_options.clear()
-        tr_options.send_keys('{}'.format(str(num)))
-        element_page.find_element_by_class_name("btn").click()
-        time.sleep(10)
+    def __get_query(self, time_0='2022-03-22', time_1='2022-03-23', pages=100):
+        url_list = []
+        for page in range(1, pages+1):
+            url = f"https://reportapi.eastmoney.com/report/jg?cb=datatable6176985&pageSize=100&beginTime={time_0}&endTime={time_1}&pageNo={page}"
+            url_list.append(url)
+        query_list = []
+        for i in range(len(url_list)):
+            url = url_list[i]
+            res = requests.get(url)
+            res_text = res.text
+            res_text = res_text[17:-1]
+            res_js = json.loads(res_text)
+            if len(res_js['data'])==0:
+                break
+            query_list.extend(res_js['data'])
+        return query_list
 
     def scraper_iterator(self) -> Generator[str, None, None]:
         """ scrape by article date, from today to seven days ago """
         today = datetime.now()
-        offset = timedelta(days=-self.DURATION)
-        date_before = (today + offset).strftime('%Y-%m-%d')
-        start_date = date_before
-
-        # BUG: PhantomJS not found in the worker images
-        '''init phantomjs driver'''
-        self.driver = webdriver.PhantomJS(executable_path=self.phantomjs_path)
-        self.driver.get(self.url)
-
-        '''get page from the newest date (page 1)'''
-        pageNum_init = 1
-        FLAG = True
-
-        while FLAG:
-            self.__get_page_by_num(pageNum_init)
-            try:
-                element_table = WebDriverWait(self.driver, 30).until(EC.presence_of_element_located((By.ID, "stock_table")))
-                tr_options = element_table.find_elements_by_tag_name("tr")
-                for tr_option in tr_options:
-                    '''get: idx,title,writer,writer's company,article num'''
-                    td_options = tr_option.find_elements_by_tag_name("td")
-                    re_sum_info = []
-                    for td_option in td_options:
-                        re_sum_info.append(td_option.text)
-                    if not re_sum_info:
-                        continue
-                    '''judge text date'''
-                    time_tmp = time.strptime(re_sum_info[-1], "%Y-%m-%d")
-                    if time_tmp < start_date:
-                        FLAG = False
-                        break
-                    elif len(td_options) >= 4:
-                        '''get article content'''
-                        url_element = td_options[4]
-                        if not url_element:
-                            continue
-                        link = url_element.find_elements_by_xpath(".//*[@href]")[0]  # get the link
-                        text_link = link.get_attribute('href')
-                        queryInfoDict = {
-                            'link': text_link,
-                            'info': re_sum_info,
-                        }
-                        yield queryInfoDict
-
-            except Exception as e:
-                info = traceback.format_exc()
-                print(info)
-                pageNum_init += 1
-            pageNum_init += 1
-        self.driver.quit()
+        offset = timedelta(hours=-self.OFFSET_HR)
+        duration = timedelta(hours=-self.DURATION_HR)
+        end_dt = (today + offset).strftime('%Y-%m-%d')
+        start_dt = (today + offset + duration).strftime('%Y-%m-%d')
+        # Start to end
+        query_list = self.__get_query(start_dt, end_dt, pages=100)
+        for query in query_list:
+            encodeUrl = query['encodeUrl']
+            content_url = f'https://data.eastmoney.com/report/zw_macresearch.jshtml?encodeUrl={encodeUrl}'
+            query_dict = {
+                'link': content_url,
+                'info': query,
+            }
+            yield query_dict
 
     def get_scraper_params(self) -> dict:
         """
@@ -152,45 +113,61 @@ class EastMoney(Lurker):
         """
         return doc['text_title'] + doc['text_content']
 
+    def __get_content(self, text_link):
+        html = requests.get(text_link).content
+        soup = BeautifulSoup(html, "lxml")
+        # class_name = {
+        #     '个股研报': 'stockzw_content',
+        #     '行业研报': 'zw-content',
+        #     '宏观研究': 'ctx-content',
+        #     '盈利预测': '',
+        #     '新股研报': 'stockzw_content',
+        #     '策略报告': 'ctx-content',
+        #     '券商晨报': 'zw-content',
+        # }
+        res = {
+            'stockzw_content': soup.find('div', class_='stockzw_content'),
+            'ctx-content': soup.find('div', class_='ctx-content'),
+            'zw-content': soup.find('div', class_='zw-content'),
+        }
+        for text_type in res.keys():
+            if res[text_type] != None:
+                content = [i.text for i in res[text_type].find_all('p')]
+                content = ''.join(content)
+                content = content.replace('\u3000\u30002', '')
+                content = content.replace('\u3000\u3000', '')
+                content = content.replace('\r', '')
+                content = content.replace(' ', '')
+                return text_type, content
+        return None, None
+
     def get_document(self, query, **kwargs):
 
         text_link = query['link']
-        re_sum_info = query['info']
-
-        orihtml = requests.get(text_link).content
-        soup = BeautifulSoup(orihtml, "lxml")
-
-        '''judge whether black page'''
-        if soup.find('div', class_='stockzw_content') == None:
-            return None
-        page_con = []
-        for a in soup.find('div', class_='stockzw_content').find_all('p'):
-            page_con.append(str(a.text))
-        text_content = "\n".join(page_con)
-
-        '''info on website'''
-        one = {}
-        one['ticker_id'] = re_sum_info[1]
-        one['ticker_name'] = re_sum_info[2]
-        one['ticker_class'] = re_sum_info[13]
-        one['ticker_grade'] = [re_sum_info[5], re_sum_info[6]]
-        one['text_time'] = re_sum_info[14]
-        one['text_title'] = re_sum_info[4]
-        one['text_content'] = text_content.replace('\n', '').replace(' ', '').replace('\u3000\u3000', '')
+        text_info = query['info']
+        text_type, text_content = self.__get_content(text_link)
 
         '''info from baidu-nlu-api'''
-        # one = self.__send_data_to_baidu_api(one)
+        if text_content!=None:
+            keywords = self.__get_keywords_from_tencent_api(text_content)
+        else:
+            keywords = []
 
         doc = EastMoneyMongoDoc(
-            ticker_id=one['ticker_id'],
-            ticker_name=one['ticker_name'],
-            ticker_class=one['ticker_class'],
-            ticker_grade=one['ticker_grade'],
-            text_time = one['text_time'],
-            text_title=one['text_title'],
-            text_content=one['text_content'],
-            text_keyword=one['text_keyword'],
-            text_topic=one['text_topic'],
+            unique_identifier = '',
+            tickers = [],
+            sentiment=[],
+            sector_code=4,
+            source_link=[],
+            time=datetime.now(),
+            source_id='',
+            text_hash='',
+
+            link=text_link,
+            info=text_info,
+            type=text_type,
+            content=text_content,
+            keywords=keywords,
         )
 
         try:
@@ -203,19 +180,13 @@ class EastMoney(Lurker):
             self.logger.debug(f"Failed Insertion into Mongo: {e}")
             return False
 
-    # def __send_data_to_baidu_api(self, one):
-    #     """get text intent and keyword by baidu-nlu-api
-    #     """
-    #     title = one['text_title']
-    #     content = one['text_content']
-    #     try:
-    #         res_keyword = self.nlu_tool.get_keyword(title, content)
-    #     except Exception:
-    #         res_keyword = {}
-    #     try:
-    #         res_topic = self.nlu_tool.get_topic(title, content)
-    #     except Exception:
-    #         res_topic = {}
-    #     one['text_keyword'] = res_keyword["items"] if "items" in res_keyword.keys() else None
-    #     one['text_topic'] = res_topic["item"] if "item" in res_topic.keys() else None
-    #     return one
+    def __get_keywords_from_tencent_api(self, content):
+        """get text intent and keyword by tencent-nlu-api
+        """
+        try:
+            resp = self.nlu_tool.get_keywords(content)
+            return [{'word':i.Word, 'score':i.Score} for i in resp.Keywords]
+        except Exception:
+            pass
+
+        return []

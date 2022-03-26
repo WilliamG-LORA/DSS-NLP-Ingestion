@@ -63,6 +63,12 @@ class Worker():
         elif lurker_type == "etnet":
             print(f"Worker: do {lurker_type}, payload: {payload}")
             lurker = Etnet(payload)
+        elif lurker_type == "eastmoney":
+            duration_hr, offset_hr = payload.split('-')
+            duration_hr = int(duration_hr)
+            offset_hr = int(offset_hr)
+            print(f"Worker: do {lurker_type}, payload: {payload}")
+            lurker = EastMoney(duration_hr=duration_hr,offset_hr=offset_hr)
         else:
             self.logger.error(f"Invalid Lurker Type: {lurker_type}")
 

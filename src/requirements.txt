@@ -11,4 +11,4 @@ redis==4.1.4
 requests==2.27.1
 selenium==2.48.0
 lxml==4.8.0
-baidu-aip==2.2.18.0
+tencentcloud-sdk-python

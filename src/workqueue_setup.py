@@ -77,6 +77,9 @@ def main():
         if lurker == 'reddit':
             duration = 24
             payload = [ f"{lurker}:1-{offset}" for offset in range(duration) ]
+        elif lurker == 'eastmoney':
+            duration = 24
+            payload = [ f"{lurker}:1-{offset}" for offset in range(duration) ]
         else:
             payload = [ f"{lurker}:{ticker}" for ticker in tickers]
         
