@@ -49,7 +49,7 @@ def update_universe(universe_collection):
 def populate_wq(tickers: List[str], name: str):
     wq = RedisWQ(name=name, host=os.getenv("REDIS_SERVICE_HOST"))
     # Clean up the work queue.
-    wq.cleanup()
+    # wq.cleanup()
 
     # Add the item to the work queue
     for ticker in tickers:
@@ -70,21 +70,26 @@ def main():
 
     # tickers = itertools.islice(tickers,10)
 
+    days_to_scrape = int(os.environ['DURATION_DAYS'])
+
+    tasks = []
     # For give the work to a specific type of lurker
     for lurker in lurkers_collection:
         # Each lurker will try to scrape the universe
         print(f"Init for lurker type {lurker}")
         if lurker == 'reddit':
-            duration = 24
+            duration = 24 * days_to_scrape
             payload = [ f"{lurker}:1-{offset}" for offset in range(duration) ]
         elif lurker == 'eastmoney':
-            duration = 24
+            duration = 24 * days_to_scrape
             payload = [ f"{lurker}:1-{offset}" for offset in range(duration) ]
         else:
             payload = [ f"{lurker}:{ticker}" for ticker in tickers]
         
-        populate_wq(payload, redis_wqs)
+        tasks += payload
+
+    print(len(tasks))
+    populate_wq(tasks, redis_wqs)
 
 if __name__ == "__main__":
-    # print("Skip")
     main()

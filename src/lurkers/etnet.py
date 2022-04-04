@@ -19,6 +19,7 @@ from bs4 import BeautifulSoup
 import requests
 import urllib
 from utils.general_utils import get_configs, get_sector_dict, get_sector_loose
+from utils.hkscraper_utils import getTickerCode
 import logging
 from datetime import datetime
 import re
@@ -124,17 +125,6 @@ class Etnet(Lurker):
         """
         return doc['title'] + doc['description'] + doc['text']
 
-    def _getTickerCode(self,ticker_list):
-        temp = list()
-        for ticker in ticker_list:
-            if len(ticker) == 6:
-                suffix = ".SZ"
-            else:
-                suffix = ".HK"
-            
-            temp.append(ticker+suffix)
-        return temp
-
     # Start of Helper Func
     def strQ2B(self,ustring):
         """把字串全形轉半形"""
@@ -189,17 +179,6 @@ class Etnet(Lurker):
         article_links = list(article_links)
         
         return article_links
-
-    def getTickerCode(self,ticker_list):
-        temp = list()
-        for ticker in ticker_list:
-            if len(ticker) == 6:
-                suffix = ".SZ"
-            else:
-                suffix = ".HK"
-            
-            temp.append(ticker+suffix)
-        return temp
 
     def get_document(self, query, **kwargs) -> bool:
         """
@@ -259,7 +238,7 @@ class Etnet(Lurker):
                 if len(ticker_list) == 0:
                     ticker_list.append(self.ticker)
 
-                ticker_list = self.getTickerCode(ticker_list)
+                ticker_list = getTickerCode(ticker_list)
 
                 # Get News Time
                 timestamp = soup.find_all('p', class_="date")

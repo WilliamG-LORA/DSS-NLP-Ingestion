@@ -153,31 +153,38 @@ class EastMoney(Lurker):
         else:
             keywords = []
 
-        doc = EastMoneyMongoDoc(
-            unique_identifier = '',
-            tickers = [],
-            sentiment=[],
-            sector_code=4,
-            source_link=[],
-            time=datetime.now(),
-            source_id='',
-            text_hash='',
+        # Get UniqueIdentifier
+        unique_identifier = self.tryAddArticleToHistory(str(text_info['id']))
 
-            link=text_link,
-            info=text_info,
-            type=text_type,
-            content=text_content,
-            keywords=keywords,
-        )
+        if unique_identifier:
+            doc = EastMoneyMongoDoc(
+                unique_identifier = '',
+                tickers = [],
+                sentiment=[],
+                sector_code=4,
+                source_link=[],
+                time=datetime.now(),
+                source_id='',
+                text_hash='',
 
-        try:
-            self.successful_documents.append(asdict(doc))
-            self.successful_queries.append(query)
-        except Exception as e:
-            failed_payloads = 1
-            self.failed_queries.append(query)
-            self.logger.info(f"Payload failed to migrate to mongo. {failed_payloads}; {query}")
-            self.logger.debug(f"Failed Insertion into Mongo: {e}")
+                link=text_link,
+                info=text_info,
+                type=text_type,
+                content=text_content,
+                keywords=keywords,
+            )
+
+            try:
+                self.successful_documents.append(asdict(doc))
+                self.successful_queries.append(query)
+            except Exception as e:
+                failed_payloads = 1
+                self.failed_queries.append(query)
+                self.logger.info(f"Payload failed to migrate to mongo. {failed_payloads}; {query}")
+                self.logger.debug(f"Failed Insertion into Mongo: {e}")
+                return False
+        else:
+            self.skipped_queries.append(query)
             return False
 
     def __get_keywords_from_tencent_api(self, content):

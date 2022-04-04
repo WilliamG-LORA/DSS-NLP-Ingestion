@@ -30,7 +30,7 @@ kind: Job
 metadata:
   name: lurker
 spec:
-  parallelism: 5
+  parallelism: 4
   template:
     metadata:
       name: lurker
@@ -43,7 +43,7 @@ spec:
       containers:
       - name: worker
         image: nlp-ingestion-worker
-        args: [ 'worker.py' ] # TODO This should run the scrape() func from the lurker base class.
+        args: [ 'worker.py' ] # This is the driver code
         # args: [ '-m','unittest','discover', 'tests' ]
         # args: ['-m', 'unittest', 'tests/test_eastmoney.py']
         volumeMounts:

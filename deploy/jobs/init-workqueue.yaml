@@ -10,6 +10,9 @@ spec:
       containers:
       - name: init-workqueue
         image: nlp-ingestion-worker
+        env:
+          - name: DURATION_DAYS # How many days before today you want to scrape
+            value: "7"
         args: [ 'workqueue_setup.py' ]
         volumeMounts:
           - name: configs

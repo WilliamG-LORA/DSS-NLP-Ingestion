@@ -51,8 +51,8 @@ data:
     redis_history: global_history
     redis_history_test: global_history_test
     lurkers_collection: 
+      - aastocks
+      - etnet
       - eastmoney
       - newsfilter
       - reddit
-      - aastocks
-      - etnet

@@ -20,6 +20,7 @@ from bs4 import BeautifulSoup
 import requests
 import urllib
 from utils.general_utils import get_configs, get_sector_dict, get_sector_loose
+from utils.hkscraper_utils import getTickerCode
 import logging
 from datetime import datetime
 import re
@@ -105,17 +106,6 @@ class AAstocks(Lurker):
         """
         return doc['title'] + doc['description'] + doc['text']
 
-    def _getTickerCode(self,ticker_list):
-        temp = list()
-        for ticker in ticker_list:
-            if len(ticker) == 6:
-                suffix = ".SZ"
-            else:
-                suffix = ".HK"
-            
-            temp.append(ticker+suffix)
-        return temp
-
     def get_document(self, query, **kwargs) -> bool:
         """
         Implementation of a function that scrape a article from a given query
@@ -171,7 +161,7 @@ class AAstocks(Lurker):
             if len(ticker_list) == 0:
                 ticker_list.append(self.ticker)
 
-            ticker_list = self._getTickerCode(ticker_list)
+            ticker_list = getTickerCode(ticker_list)
 
             # Content
             text = soup.find(id="spanContent")

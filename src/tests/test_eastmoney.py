@@ -4,7 +4,7 @@ from lurkers import *
 class TestEastMoneyLurkerMethods(unittest.TestCase):
 
     def setUp(self):
-        self.lurker = Reddit(duration_hr=1,offset_hr=1,test_mode=True)
+        self.lurker = EastMoney(duration_hr=24,offset_hr=0,test_mode=True)
 
     def test_canScrape(self):
         self.assertTrue(self.lurker.dryrun())
