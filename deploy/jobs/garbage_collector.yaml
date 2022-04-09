@@ -29,7 +29,7 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 ---
 # End of k8s-wait-for permission 
-apiVersion: batch/v1
+apiVersion: batch/v1beta1
 kind: CronJob
 metadata:
   name: gc-workqueue
@@ -43,7 +43,7 @@ spec:
           - name: wait-redis
             image: groundnuty/k8s-wait-for:latest
             imagePullPolicy: Always
-            command: ["kubectl", "wait", "--for=condition=ready", "pod/redis-master"]
+            command: ["kubectl", "wait", "--for=condition=ready", "pod/redis-master-0"]
           containers:
           - name: gc-workqueue
             image: nlp-ingestion-worker

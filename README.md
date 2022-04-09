@@ -47,12 +47,36 @@ $ minikube start
 $ eval `minikube docker-env`
 ```
 
+4. Prepare directory for persistent volumes for redis pod
+```
+$ minikube ssh
+```
+
+5. Create /mnt/data/ directory in minikube ssh
+```
+docker@minikube:~$ sudo mkdir /mnt/data/
+```
+
 **Dev loop**  
 Just do:
 ```
 $ skaffold dev
 ```
 NOTE: This command needs to be run from the root directory (i.e. DSS-NLP-Ingestion/).
+
+**Deploy** 
+Preparation: 
+Make sure you have added the cluster configuration in the kubeconfig(~/.kube/config)
+
+1. Change the context
+```
+$ kubectl config set current-context <your-context>
+```
+
+2. Deploy the cluster by:
+```
+$ skaffold run
+```
 
 **Settings**
 The config files are located inside the "deploy" folder, which consist of multiple config files
@@ -66,7 +90,9 @@ deploy
 │   ├── init-workqueue.yaml     # kubeconfig 
 │   └── worker.yaml             # kubeconfig 
 ├── microservices
-│   └── redis.yaml              # kubeconfig
+│   ├── redis-local.yaml        # Redis Local Config
+│   ├── redis-vpc.yaml          # Redis Deployment Config
+│   └── redis.yaml              # Redis Base Config
 └── secrets
     └── db-creds.yaml           # db-creds in base64 format
 ```

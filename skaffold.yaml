@@ -9,7 +9,7 @@ deploy:
     manifests:
     - deploy/jobs/worker.yaml
     - deploy/jobs/garbage_collector.yaml
-
+    
 profiles:
 - name: minikube
   activation:

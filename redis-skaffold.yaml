@@ -6,3 +6,20 @@ deploy:
   kubectl:
     manifests:
     - deploy/microservices/redis.yaml
+
+profiles:
+- name: minikube
+  activation:
+    - kubeContext: minikube
+  deploy:
+    kubectl:
+      manifests:
+      - deploy/microservices/redis-local.yaml
+
+- name: production
+  activation:
+    - kubeContext: nlp-ingestion-production
+  deploy:
+    kubectl:
+      manifests:
+      - deploy/microservices/redis-vpc.yaml

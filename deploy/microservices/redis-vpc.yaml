@@ -1,0 +1,23 @@
+---
+apiVersion: storage.k8s.io/v1 
+kind: StorageClass 
+metadata: 
+  name: redis-sc-ali
+provisioner: diskplugin.csi.alibabacloud.com 
+parameters: 
+  type: cloud_efficiency 
+reclaimPolicy: Retain 
+allowVolumeExpansion: true  
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+spec:
+  storageClassName: "redis-sc-ali"
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
