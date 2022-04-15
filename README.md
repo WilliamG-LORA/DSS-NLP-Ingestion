@@ -17,7 +17,31 @@ This ingestion system consist of 5 main parts:
 ## Current available lurker
 ### English
 - Reddit (US Stock)
-- News Filters (US Stock)
+- News Filter (US Stock)
+    - Analyst Ratings
+    - Bloomberg
+    - Reuters
+    - CNBC
+    - WSJ
+    - Barrons
+    - PR Newswire
+    - Globe Newswire
+    - BusinessWire
+    - AccessWire
+    - SeekingAlpha
+    - Bezinga
+    - S&P Global
+    - Earnings Call Transcripts
+    - ClinicalTrials.gov
+    - SAM.gov
+    - SEC Filings
+    - SEC Press Releases
+    - FCC Filings
+    - Patent Database
+    - Patent Trial & Appeal Board
+    - Department of Defense
+    - FDA Drug Approvals
+    - Economic Indicators
 
 ### Chinese (Traditional)
 - AAStock (HK Stock)
