@@ -1,0 +1,19 @@
+apiVersion: skaffold/v2beta26
+kind: Config
+metadata:
+  name: init-workqueue
+requires:
+  - path: ./redis-skaffold.yaml
+build:
+  artifacts:
+  - image: nlp-ingestion-worker
+    context: .
+    docker:
+      dockerfile: docker/worker.Dockerfile
+
+deploy:
+  kubectl:
+    manifests:
+    - deploy/configmaps/configs.yaml
+    - deploy/secrets/db-creds.yaml
+    - deploy/jobs/init-workqueue.yaml

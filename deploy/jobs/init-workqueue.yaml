@@ -1,0 +1,39 @@
+# This initialises the redis work queue
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: init-workqueue
+spec:
+  template:
+    spec:
+      containers:
+      - name: init-workqueue
+        image: nlp-ingestion-worker
+        env:
+          - name: DURATION_DAYS # How many days before today you want to scrape
+            value: "7"
+        args: [ 'workqueue_setup.py' ]
+        volumeMounts:
+          - name: configs
+            mountPath: res/configs/
+            readOnly: true
+          - name: db-creds
+            mountPath: res/db-creds/
+            readOnly: true
+      volumes:
+        - name: configs
+          configMap:
+            name: configs
+            items:
+            - key: setup-configs
+              path: setup_configs.yaml
+        - name: db-creds
+          secret:
+            secretName: db-creds
+            items:
+            - key: scraper-storage
+              path: scraper_storage.yaml
+            - key: big-universe
+              path: big_universe.yaml
+      restartPolicy: Never

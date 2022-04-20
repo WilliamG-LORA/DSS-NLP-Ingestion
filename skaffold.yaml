@@ -1,0 +1,29 @@
+apiVersion: skaffold/v2beta26
+kind: Config
+metadata:
+  name: dss-nlp-ingestion
+requires:
+  - path: ./init-workqueue-skaffold.yaml
+deploy:
+  kubectl:
+    manifests:
+    - deploy/jobs/worker.yaml
+    - deploy/jobs/garbage_collector.yaml
+    
+profiles:
+- name: minikube
+  activation:
+    - kubeContext: minikube
+
+- name: staging
+  activation:
+  - kubeContext: nlp-ingestions-staging
+  
+  # patches:
+  #   - op: replace
+
+  #     path: /deploy/kubectl/minfests/
+
+- name: production
+  activation:
+  - kubeContext: nlp-ingestion-production

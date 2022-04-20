@@ -1,0 +1,83 @@
+# Start of k8s-wait-for permission 
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: k8s-wait-for
+rules:
+  - apiGroups: ["core"]
+    resources: ["services","pods"]
+    verbs: ["get", "watch", "list"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "watch", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: default
+subjects:
+  - kind: ServiceAccount
+    name: default
+roleRef:
+  kind: Role
+  name: k8s-wait-for
+  apiGroup: rbac.authorization.k8s.io
+--- 
+# End of k8s-wait-for permission 
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: lurker
+spec:
+  parallelism: 4
+  template:
+    metadata:
+      name: lurker
+    spec:
+      initContainers: # NOTE: Wait for work queue services is completed
+        - name: wait-init-workqueue
+          image: groundnuty/k8s-wait-for:latest
+          imagePullPolicy: Always
+          command: ["kubectl", "wait", "--for=condition=complete", "--timeout=300s", "job/init-workqueue"]
+      containers:
+      - name: worker
+        image: nlp-ingestion-worker
+        args: [ 'worker.py' ] # This is the driver code
+        # args: [ '-m','unittest','discover', 'tests' ]
+        # args: ['-m', 'unittest', 'tests/test_eastmoney.py']
+        volumeMounts:
+          - name: configs
+            mountPath: res/configs/
+            readOnly: true
+          - name: db-creds
+            mountPath: res/db-creds/
+            readOnly: true
+      volumes:
+        - name: configs
+          configMap:
+            name: configs
+            items:
+            - key: base-configs
+              path: base-configs.yaml
+            - key: setup-configs
+              path: setup-configs.yaml
+            - key: newsfilter-configs
+              path: newsfilter-configs.yaml
+            - key: aastocks-configs
+              path: aastocks-configs.yaml
+            - key: etnet-configs
+              path: etnet-configs.yaml
+            - key: eastmoney-configs
+              path: eastmoney_configs.yaml
+            - key: reddit-configs
+              path: reddit-configs.yaml
+        - name: db-creds
+          secret:
+            secretName: db-creds
+            items:
+            - key: scraper-storage
+              path: scraper_storage.yaml
+            - key: big-universe
+              path: big_universe.yaml
+      restartPolicy: OnFailure
